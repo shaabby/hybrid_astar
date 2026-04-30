@@ -6,7 +6,8 @@
 
 std::string JsonExporter::exportPath(const GridMap& map,
                                       const Car& car,
-                                      const std::vector<CarPose>& path) {
+                                      const std::vector<CarPose>& path,
+                                      const std::vector<CarPose>& expanded) {
     std::ostringstream out;
     out << std::fixed << std::setprecision(6);
     out << "{\n";
@@ -14,7 +15,7 @@ std::string JsonExporter::exportPath(const GridMap& map,
     out << "  \"map\": " << exportMap(map) << ",\n";
     out << "  \"vehicle\": " << exportVehicle(car.config()) << ",\n";
     out << "  \"path\": " << exportPathPoints(path) << ",\n";
-    out << "  \"expanded\": []\n";
+    out << "  \"expanded\": " << exportPathPoints(expanded) << "\n";
     out << "}\n";
     return out.str();
 }

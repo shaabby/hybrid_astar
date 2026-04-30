@@ -12,7 +12,6 @@ file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
 
 add_executable(hybrid_astar
     ${PROJECT_SOURCES}
-    include/Car.hpp
 )
 
 target_include_directories(hybrid_astar

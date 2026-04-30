@@ -26,6 +26,12 @@ std::string HtmlWriter::wrap(const std::string& json) {
       margin-bottom: 12px;
     }
     h1 { margin: 0; font-size: 20px; }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 420px;
+    }
     button {
       border: 1px solid #b8c0cc;
       background: white;
@@ -33,6 +39,16 @@ std::string HtmlWriter::wrap(const std::string& json) {
       padding: 8px 12px;
       font: inherit;
       cursor: pointer;
+    }
+    input[type="range"] {
+      flex: 1;
+      min-width: 180px;
+    }
+    .frame-label {
+      min-width: 74px;
+      color: #475569;
+      font-size: 14px;
+      text-align: right;
     }
     canvas {
       display: block;
@@ -47,7 +63,12 @@ std::string HtmlWriter::wrap(const std::string& json) {
   <main>
     <div class="bar">
       <h1>Hybrid A* Output Loop Demo: Straight Vehicle Motion</h1>
-      <button id="toggle" type="button">Pause</button>
+      <div class="controls">
+        <button id="toggle" type="button">Pause</button>
+        <button id="step" type="button">Step</button>
+        <input id="timeline" type="range" min="0" value="0">
+        <span id="frameLabel" class="frame-label"></span>
+      </div>
     </div>
     <canvas id="canvas" width="1100" height="720"></canvas>
   </main>
@@ -66,9 +87,29 @@ std::string HtmlWriter::wrap(const std::string& json) {
     );
     let frame = 0;
     let playing = true;
+    const toggleButton = document.getElementById("toggle");
+    const stepButton = document.getElementById("step");
+    const timeline = document.getElementById("timeline");
+    const frameLabel = document.getElementById("frameLabel");
+    timeline.max = Math.max(0, data.path.length - 1);
 
     function wx(x) { return margin + x * scale; }
     function wy(y) { return margin + (data.map.height - y) * scale; }
+
+    function clampFrame(nextFrame) {
+      return Math.max(0, Math.min(data.path.length - 1, nextFrame));
+    }
+
+    function syncControls() {
+      timeline.value = String(frame);
+      frameLabel.textContent = `${frame + 1} / ${data.path.length}`;
+    }
+
+    function setFrame(nextFrame) {
+      frame = clampFrame(nextFrame);
+      syncControls();
+      draw();
+    }
 
     function drawGrid() {
       ctx.strokeStyle = "#e5e7eb";
@@ -172,17 +213,37 @@ std::string HtmlWriter::wrap(const std::string& json) {
 
     function tick() {
       if (playing) {
-        frame = (frame + 1) % data.path.length;
+        if (frame + 1 < data.path.length) {
+          setFrame(frame + 1);
+        } else {
+          playing = false;
+          toggleButton.textContent = "Start";
+        }
       }
-      draw();
       requestAnimationFrame(tick);
     }
 
-    document.getElementById("toggle").addEventListener("click", () => {
+    toggleButton.addEventListener("click", () => {
+      if (!playing && frame + 1 >= data.path.length) {
+        setFrame(0);
+      }
       playing = !playing;
-      document.getElementById("toggle").textContent = playing ? "Pause" : "Play";
+      toggleButton.textContent = playing ? "Pause" : "Start";
     });
 
+    stepButton.addEventListener("click", () => {
+      playing = false;
+      toggleButton.textContent = "Start";
+      setFrame(frame + 1);
+    });
+
+    timeline.addEventListener("input", () => {
+      playing = false;
+      toggleButton.textContent = "Start";
+      setFrame(Number(timeline.value));
+    });
+
+    syncControls();
     draw();
     requestAnimationFrame(tick);
   </script>

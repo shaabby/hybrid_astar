@@ -1,6 +1,7 @@
 #include "Car.hpp"
 #include "GridMap.hpp"
 #include "HtmlWriter.hpp"
+#include "HybridAstar.hpp"
 #include "JsonExporter.hpp"
 
 #include <filesystem>
@@ -11,29 +12,6 @@
 #include <vector>
 
 namespace {
-
-std::vector<CarPose> makeStraightPath(const GridMap& map, const Car& car) {
-    const Pose2D& start = map.start();
-    CarPose pose{
-        .x = start.x,
-        .y = start.y,
-        .theta = start.theta,
-        .steer = 0.0,
-        .direction = 1
-    };
-
-    std::vector<CarPose> path;
-    path.push_back(pose);
-
-    constexpr int frame_count = 90;
-    constexpr double step_distance = 0.18;
-    for (int i = 0; i < frame_count; ++i) {
-        pose = car.step(pose, 0.0, 1, step_distance);
-        path.push_back(pose);
-    }
-
-    return path;
-}
 
 void writeTextFile(const std::filesystem::path& path, const std::string& text) {
     std::ofstream output(path);
@@ -52,10 +30,15 @@ int main(int argc, char* argv[]) {
                                          : "map/hybrid_astar_map_defalt.json";
         const GridMap map = MapLoader::loadJson(map_path);
         const Car car;
-        const std::vector<CarPose> path = makeStraightPath(map, car);
+        const HybridAstar planner;
+        const PlanResult plan = planner.plan(map, car);
+        if (!plan.success) {
+            throw std::runtime_error("Hybrid A* failed to find a path");
+        }
 
         std::filesystem::create_directories("output");
-        const std::string json = JsonExporter::exportPath(map, car, path);
+        const std::string json = JsonExporter::exportPath(
+            map, car, plan.path, plan.expanded);
         writeTextFile("output/result.json", json);
         writeTextFile("output/demo.html", HtmlWriter::wrap(json));
 
@@ -70,8 +53,9 @@ int main(int argc, char* argv[]) {
                   << start.theta << ")\n";
         std::cout << "  goal: (" << goal.x << ", " << goal.y << ", " << goal.theta
                   << ")\n";
-        std::cout << "Generated straight demo path\n";
-        std::cout << "  poses: " << path.size() << '\n';
+        std::cout << "Generated Hybrid A* path\n";
+        std::cout << "  poses: " << plan.path.size() << '\n';
+        std::cout << "  expanded: " << plan.expanded.size() << '\n';
         std::cout << "  output/result.json\n";
         std::cout << "  output/demo.html\n";
 
