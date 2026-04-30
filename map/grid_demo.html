@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Grid Map Demo</title>
+  <title>Grid Map Editor</title>
   <style>
     :root {
       color-scheme: light;
@@ -12,36 +12,127 @@
       color: #17202a;
     }
 
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
       display: grid;
       place-items: center;
+      padding: 18px;
     }
 
     main {
-      width: min(1100px, calc(100vw - 32px));
+      width: min(1180px, 100%);
     }
 
-    .toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
       gap: 16px;
+      align-items: end;
       margin-bottom: 12px;
     }
 
     h1 {
-      margin: 0;
+      margin: 0 0 6px;
       font-size: 20px;
+      font-weight: 750;
+    }
+
+    .meta {
+      margin: 0;
+      color: #586274;
+      font-size: 14px;
+    }
+
+    .tools {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    button,
+    label.file-button {
+      border: 1px solid #b8c0cc;
+      background: #ffffff;
+      color: #17202a;
+      border-radius: 6px;
+      padding: 8px 10px;
+      min-height: 36px;
+      font: inherit;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button.active {
+      border-color: #2563eb;
+      background: #dbeafe;
+      color: #1e3a8a;
       font-weight: 700;
     }
 
-    .legend {
-      display: flex;
+    button:hover,
+    label.file-button:hover {
+      border-color: #64748b;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
       gap: 14px;
-      align-items: center;
-      font-size: 14px;
+      align-items: start;
+    }
+
+    .canvas-wrap {
+      background: #ffffff;
+      border: 1px solid #cfd6df;
+      overflow: auto;
+    }
+
+    canvas {
+      display: block;
+      background: #ffffff;
+    }
+
+    aside {
+      background: #ffffff;
+      border: 1px solid #cfd6df;
+      padding: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      font-size: 13px;
+      color: #4b5563;
+    }
+
+    .field input {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 7px 8px;
+      font: inherit;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 13px;
       color: #4b5563;
     }
 
@@ -57,36 +148,89 @@
       height: 14px;
       border-radius: 3px;
       border: 1px solid rgba(0, 0, 0, 0.18);
+      flex: none;
     }
 
-    canvas {
-      width: 100%;
-      height: auto;
-      display: block;
-      background: #ffffff;
-      border: 1px solid #cfd6df;
+    .status {
+      min-height: 20px;
+      margin-top: 12px;
+      color: #475569;
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      .topbar,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .tools {
+        justify-content: flex-start;
+      }
+
+      aside {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
   <main>
-    <div class="toolbar">
-      <h1>Hybrid A* Grid Map Demo</h1>
-      <div class="legend">
-        <span><i class="swatch" style="background:#111827"></i>障碍物</span>
-        <span><i class="swatch" style="background:#16a34a"></i>起点</span>
-        <span><i class="swatch" style="background:#dc2626"></i>终点</span>
+    <div class="topbar">
+      <div>
+        <h1>Hybrid A* Grid Map Editor</h1>
+        <p class="meta">点击方格编辑障碍物，或放置起点/终点。导出的 JSON 可作为 C++ 规划输入。</p>
+      </div>
+      <div class="tools">
+        <button id="obstacleTool" class="active" type="button">障碍物</button>
+        <button id="eraseTool" type="button">擦除</button>
+        <button id="startTool" type="button">起点</button>
+        <button id="goalTool" type="button">终点</button>
+        <label class="file-button" for="fileInput">导入 JSON</label>
+        <input id="fileInput" type="file" accept=".json,application/json">
+        <button id="saveButton" type="button">保存 JSON</button>
+        <button id="resetButton" type="button">重置</button>
       </div>
     </div>
-    <canvas id="map" width="1000" height="640"></canvas>
+
+    <div class="layout">
+      <div class="canvas-wrap">
+        <canvas id="map" width="1000" height="640"></canvas>
+      </div>
+
+      <aside>
+        <div class="field">
+          <label for="startTheta">起点朝向 theta，单位：度</label>
+          <input id="startTheta" type="number" value="0" step="5">
+        </div>
+        <div class="field">
+          <label for="goalTheta">终点朝向 theta，单位：度</label>
+          <input id="goalTheta" type="number" value="0" step="5">
+        </div>
+        <div class="field">
+          <label for="fileName">保存文件名</label>
+          <input id="fileName" type="text" value="hybrid_astar_map.json">
+        </div>
+
+        <div class="legend">
+          <span><i class="swatch" style="background:#111827"></i>障碍物</span>
+          <span><i class="swatch" style="background:#ffffff"></i>空地</span>
+          <span><i class="swatch" style="background:#16a34a"></i>起点</span>
+          <span><i class="swatch" style="background:#dc2626"></i>终点</span>
+        </div>
+
+        <p id="status" class="status"></p>
+      </aside>
+    </div>
   </main>
 
   <script>
-    const mapData = {
+    const defaultMap = {
+      version: 1,
       width: 60,
       height: 36,
-      start: { x: 6, y: 6, theta: 0 },
-      goal: { x: 52, y: 28, theta: 0 },
+      start: { x: 6.5, y: 6.5, theta: 0 },
+      goal: { x: 52.5, y: 28.5, theta: 0 },
       obstacles: [
         { x: 0, y: 0, w: 60, h: 1 },
         { x: 0, y: 35, w: 60, h: 1 },
@@ -102,14 +246,102 @@
 
     const canvas = document.getElementById("map");
     const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+    const startThetaInput = document.getElementById("startTheta");
+    const goalThetaInput = document.getElementById("goalTheta");
+    const fileNameInput = document.getElementById("fileName");
+
+    let tool = "obstacle";
+    let mapData = normalizeMap(defaultMap);
+    let dragging = false;
+    let dragValue = true;
 
     const margin = 36;
-    const cell = Math.min(
-      (canvas.width - margin * 2) / mapData.width,
-      (canvas.height - margin * 2) / mapData.height
-    );
-    const originX = margin;
-    const originY = canvas.height - margin;
+    let cell = 1;
+    let originX = margin;
+    let originY = canvas.height - margin;
+
+    function degToRad(value) {
+      return Number(value) * Math.PI / 180.0;
+    }
+
+    function radToDeg(value) {
+      return Math.round(Number(value) * 180.0 / Math.PI);
+    }
+
+    function keyOf(x, y) {
+      return `${x},${y}`;
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function normalizeMap(raw) {
+      const normalized = {
+        version: raw.version ?? 1,
+        width: Number(raw.width ?? 60),
+        height: Number(raw.height ?? 36),
+        start: raw.start ?? { x: 6.5, y: 6.5, theta: 0 },
+        goal: raw.goal ?? { x: 52.5, y: 28.5, theta: 0 },
+        obstacleSet: new Set()
+      };
+
+      for (const item of raw.obstacles ?? []) {
+        const x0 = Math.floor(Number(item.x));
+        const y0 = Math.floor(Number(item.y));
+        const w = Math.max(1, Math.floor(Number(item.w ?? 1)));
+        const h = Math.max(1, Math.floor(Number(item.h ?? 1)));
+        for (let y = y0; y < y0 + h; ++y) {
+          for (let x = x0; x < x0 + w; ++x) {
+            if (isInside(normalized, x, y)) {
+              normalized.obstacleSet.add(keyOf(x, y));
+            }
+          }
+        }
+      }
+
+      return normalized;
+    }
+
+    function exportableMap() {
+      const obstacles = [...mapData.obstacleSet]
+        .map((key) => {
+          const [x, y] = key.split(",").map(Number);
+          return { x, y };
+        })
+        .sort((a, b) => a.y - b.y || a.x - b.x);
+
+      return {
+        version: 1,
+        width: mapData.width,
+        height: mapData.height,
+        start: {
+          x: Number(mapData.start.x.toFixed(3)),
+          y: Number(mapData.start.y.toFixed(3)),
+          theta: Number(degToRad(startThetaInput.value).toFixed(6))
+        },
+        goal: {
+          x: Number(mapData.goal.x.toFixed(3)),
+          y: Number(mapData.goal.y.toFixed(3)),
+          theta: Number(degToRad(goalThetaInput.value).toFixed(6))
+        },
+        obstacles
+      };
+    }
+
+    function isInside(data, x, y) {
+      return x >= 0 && y >= 0 && x < data.width && y < data.height;
+    }
+
+    function updateGeometry() {
+      cell = Math.min(
+        (canvas.width - margin * 2) / mapData.width,
+        (canvas.height - margin * 2) / mapData.height
+      );
+      originX = margin;
+      originY = canvas.height - margin;
+    }
 
     function toCanvasX(x) {
       return originX + x * cell;
@@ -117,6 +349,78 @@
 
     function toCanvasY(y) {
       return originY - y * cell;
+    }
+
+    function cellFromEvent(event) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const px = (event.clientX - rect.left) * scaleX;
+      const py = (event.clientY - rect.top) * scaleY;
+      const x = Math.floor((px - originX) / cell);
+      const y = Math.floor((originY - py) / cell);
+      if (!isInside(mapData, x, y)) {
+        return null;
+      }
+      return { x, y };
+    }
+
+    function setTool(nextTool) {
+      tool = nextTool;
+      for (const [id, value] of [
+        ["obstacleTool", "obstacle"],
+        ["eraseTool", "erase"],
+        ["startTool", "start"],
+        ["goalTool", "goal"]
+      ]) {
+        document.getElementById(id).classList.toggle("active", value === tool);
+      }
+      setStatus(`当前工具：${toolName(tool)}`);
+    }
+
+    function toolName(value) {
+      return {
+        obstacle: "障碍物",
+        erase: "擦除",
+        start: "起点",
+        goal: "终点"
+      }[value];
+    }
+
+    function applyCell(cellPos, fromDrag = false) {
+      if (!cellPos) {
+        return;
+      }
+
+      const key = keyOf(cellPos.x, cellPos.y);
+      if (tool === "obstacle") {
+        if (!fromDrag) {
+          dragValue = !mapData.obstacleSet.has(key);
+        }
+        if (dragValue) {
+          mapData.obstacleSet.add(key);
+        } else {
+          mapData.obstacleSet.delete(key);
+        }
+      } else if (tool === "erase") {
+        mapData.obstacleSet.delete(key);
+      } else if (tool === "start") {
+        mapData.start = {
+          x: cellPos.x + 0.5,
+          y: cellPos.y + 0.5,
+          theta: degToRad(startThetaInput.value)
+        };
+        mapData.obstacleSet.delete(key);
+      } else if (tool === "goal") {
+        mapData.goal = {
+          x: cellPos.x + 0.5,
+          y: cellPos.y + 0.5,
+          theta: degToRad(goalThetaInput.value)
+        };
+        mapData.obstacleSet.delete(key);
+      }
+
+      draw();
     }
 
     function drawGrid() {
@@ -145,18 +449,15 @@
     function drawObstacles() {
       ctx.save();
       ctx.fillStyle = "#111827";
-      for (const obs of mapData.obstacles) {
-        ctx.fillRect(
-          toCanvasX(obs.x),
-          toCanvasY(obs.y + obs.h),
-          obs.w * cell,
-          obs.h * cell
-        );
+      for (const key of mapData.obstacleSet) {
+        const [x, y] = key.split(",").map(Number);
+        ctx.fillRect(toCanvasX(x), toCanvasY(y + 1), cell, cell);
       }
       ctx.restore();
     }
 
-    function drawPose(pose, color, label) {
+    function drawPose(pose, color, label, thetaDeg) {
+      const theta = degToRad(thetaDeg);
       const x = toCanvasX(pose.x);
       const y = toCanvasY(pose.y);
       const r = cell * 0.42;
@@ -174,11 +475,11 @@
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.lineTo(x + Math.cos(pose.theta) * cell * 1.2, y - Math.sin(pose.theta) * cell * 1.2);
+      ctx.lineTo(x + Math.cos(theta) * cell * 1.35, y - Math.sin(theta) * cell * 1.35);
       ctx.stroke();
 
       ctx.fillStyle = "#111827";
-      ctx.font = "600 14px system-ui, sans-serif";
+      ctx.font = "700 14px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(label, x, y - cell * 0.8);
       ctx.restore();
@@ -198,15 +499,93 @@
     }
 
     function draw() {
+      updateGeometry();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawGrid();
       drawObstacles();
       drawBorder();
-      drawPose(mapData.start, "#16a34a", "S");
-      drawPose(mapData.goal, "#dc2626", "G");
+      drawPose(mapData.start, "#16a34a", "S", startThetaInput.value);
+      drawPose(mapData.goal, "#dc2626", "G", goalThetaInput.value);
     }
 
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function saveJson() {
+      const blob = new Blob([JSON.stringify(exportableMap(), null, 2) + "\n"], {
+        type: "application/json"
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileNameInput.value.trim() || "hybrid_astar_map.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus("已生成 JSON 下载文件。");
+    }
+
+    function loadJson(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          mapData = normalizeMap(JSON.parse(reader.result));
+          startThetaInput.value = radToDeg(mapData.start.theta ?? 0);
+          goalThetaInput.value = radToDeg(mapData.goal.theta ?? 0);
+          draw();
+          setStatus(`已导入：${file.name}`);
+        } catch (error) {
+          setStatus(`导入失败：${error.message}`);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById("obstacleTool").addEventListener("click", () => setTool("obstacle"));
+    document.getElementById("eraseTool").addEventListener("click", () => setTool("erase"));
+    document.getElementById("startTool").addEventListener("click", () => setTool("start"));
+    document.getElementById("goalTool").addEventListener("click", () => setTool("goal"));
+    document.getElementById("saveButton").addEventListener("click", saveJson);
+    document.getElementById("resetButton").addEventListener("click", () => {
+      mapData = normalizeMap(clone(defaultMap));
+      startThetaInput.value = radToDeg(mapData.start.theta);
+      goalThetaInput.value = radToDeg(mapData.goal.theta);
+      draw();
+      setStatus("已重置为默认地图。");
+    });
+
+    document.getElementById("fileInput").addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        loadJson(file);
+      }
+      event.target.value = "";
+    });
+
+    startThetaInput.addEventListener("input", draw);
+    goalThetaInput.addEventListener("input", draw);
+
+    canvas.addEventListener("mousedown", (event) => {
+      dragging = true;
+      applyCell(cellFromEvent(event), false);
+    });
+
+    canvas.addEventListener("mousemove", (event) => {
+      if (dragging && (tool === "obstacle" || tool === "erase")) {
+        applyCell(cellFromEvent(event), true);
+      }
+    });
+
+    window.addEventListener("mouseup", () => {
+      dragging = false;
+    });
+
+    startThetaInput.value = radToDeg(mapData.start.theta);
+    goalThetaInput.value = radToDeg(mapData.goal.theta);
     draw();
+    setStatus("就绪。");
   </script>
 </body>
 </html>
