@@ -1,0 +1,89 @@
+#include "JsonExporter.hpp"
+
+#include <iomanip>
+#include <sstream>
+#include <string>
+
+std::string JsonExporter::exportPath(const GridMap& map,
+                                      const Car& car,
+                                      const std::vector<CarPose>& path) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(6);
+    out << "{\n";
+    out << "  \"version\": 1,\n";
+    out << "  \"map\": " << exportMap(map) << ",\n";
+    out << "  \"vehicle\": " << exportVehicle(car.config()) << ",\n";
+    out << "  \"path\": " << exportPathPoints(path) << ",\n";
+    out << "  \"expanded\": []\n";
+    out << "}\n";
+    return out.str();
+}
+
+std::string JsonExporter::exportMap(const GridMap& map) {
+    const Pose2D& start = map.start();
+    const Pose2D& goal = map.goal();
+
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(6);
+    out << "{\n";
+    out << "    \"width\": " << map.width() << ",\n";
+    out << "    \"height\": " << map.height() << ",\n";
+    out << "    \"start\": {\"x\": " << start.x
+        << ", \"y\": " << start.y
+        << ", \"theta\": " << start.theta << "},\n";
+    out << "    \"goal\": {\"x\": " << goal.x
+        << ", \"y\": " << goal.y
+        << ", \"theta\": " << goal.theta << "},\n";
+    out << "    \"obstacles\": [\n";
+
+    bool first = true;
+    for (int y = 0; y < map.height(); ++y) {
+        for (int x = 0; x < map.width(); ++x) {
+            if (!map.isObstacle(x, y)) {
+                continue;
+            }
+            if (!first) {
+                out << ",\n";
+            }
+            first = false;
+            out << "      {\"x\": " << x << ", \"y\": " << y << "}";
+        }
+    }
+    out << "\n    ]\n";
+    out << "  }";
+    return out.str();
+}
+
+std::string JsonExporter::exportVehicle(const VehicleConfig& vehicle) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(6);
+    out << "{\n";
+    out << "    \"length\": " << vehicle.length << ",\n";
+    out << "    \"width\": " << vehicle.width << ",\n";
+    out << "    \"wheelbase\": " << vehicle.wheelbase << ",\n";
+    out << "    \"rearToCenter\": " << vehicle.rear_to_center << ",\n";
+    out << "    \"maxSteer\": " << vehicle.max_steer << "\n";
+    out << "  }";
+    return out.str();
+}
+
+std::string JsonExporter::exportPathPoints(
+    const std::vector<CarPose>& path) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(6);
+    out << "[\n";
+    for (std::size_t i = 0; i < path.size(); ++i) {
+        const CarPose& pose = path[i];
+        out << "    {\"x\": " << pose.x
+            << ", \"y\": " << pose.y
+            << ", \"theta\": " << pose.theta
+            << ", \"steer\": " << pose.steer
+            << ", \"direction\": " << pose.direction << "}";
+        if (i + 1 < path.size()) {
+            out << ",";
+        }
+        out << "\n";
+    }
+    out << "  ]";
+    return out.str();
+}
