@@ -60,11 +60,19 @@ CarPose Car::step(const CarPose& pose,
     const double signed_distance = static_cast<double>(sign) * distance;
 
     CarPose next = pose;
-    next.x += signed_distance * std::cos(pose.theta);
-    next.y += signed_distance * std::sin(pose.theta);
+    const double tan_steer = std::tan(clamped_steer);
 
-    if (std::abs(config_.wheelbase) > kEpsilon) {
-        next.theta += signed_distance / config_.wheelbase * std::tan(clamped_steer);
+    if (std::abs(config_.wheelbase) <= kEpsilon
+        || std::abs(tan_steer) <= kEpsilon) {
+        next.x += signed_distance * std::cos(pose.theta);
+        next.y += signed_distance * std::sin(pose.theta);
+    } else {
+        const double radius = config_.wheelbase / tan_steer;
+        const double next_theta = pose.theta + signed_distance / radius;
+
+        next.x += radius * (std::sin(next_theta) - std::sin(pose.theta));
+        next.y += radius * (std::cos(pose.theta) - std::cos(next_theta));
+        next.theta = next_theta;
     }
 
     next.steer = clamped_steer;
