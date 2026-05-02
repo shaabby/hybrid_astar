@@ -3,7 +3,10 @@
 #include "Car.hpp"
 #include "GridMap.hpp"
 
+#include <memory>
 #include <vector>
+
+class Heuristic;
 
 /**
  * @brief Hybrid A* 规划器配置参数。
@@ -42,7 +45,8 @@ public:
      * @brief 构造规划器。
      * @param[in] config 规划参数，默认使用内置默认值
      */
-    explicit HybridAstar(HybridAstarConfig config = {});
+    explicit HybridAstar(HybridAstarConfig config = {},
+                         std::shared_ptr<Heuristic> heuristic = nullptr);
 
     /**
      * @brief 在指定地图上执行路径规划。
@@ -54,4 +58,5 @@ public:
 
 private:
     HybridAstarConfig config_;
+    std::shared_ptr<Heuristic> heuristic_;
 };

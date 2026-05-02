@@ -1,13 +1,16 @@
 #include "HybridAstar.hpp"
+#include "CollisionChecker.hpp"
+#include "Heuristic.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace {
 
@@ -81,64 +84,6 @@ double distance2d(double ax, double ay, double bx, double by) {
     return std::sqrt(dx * dx + dy * dy);
 }
 
-using Point2 = std::array<double, 2>;
-using Quad = std::array<Point2, 4>;
-
-double dot(const Point2& lhs, const Point2& rhs) {
-    return lhs[0] * rhs[0] + lhs[1] * rhs[1];
-}
-
-void project(const Quad& polygon, const Point2& axis, double& min, double& max) {
-    min = dot(polygon[0], axis);
-    max = min;
-    for (std::size_t i = 1; i < polygon.size(); ++i) {
-        const double value = dot(polygon[i], axis);
-        min = std::min(min, value);
-        max = std::max(max, value);
-    }
-}
-
-bool overlapsOnAxis(const Quad& lhs, const Quad& rhs, const Point2& axis) {
-    constexpr double kOverlapEpsilon = 1.0e-9;
-    double lhs_min = 0.0;
-    double lhs_max = 0.0;
-    double rhs_min = 0.0;
-    double rhs_max = 0.0;
-    project(lhs, axis, lhs_min, lhs_max);
-    project(rhs, axis, rhs_min, rhs_max);
-    return lhs_max >= rhs_min - kOverlapEpsilon
-        && rhs_max >= lhs_min - kOverlapEpsilon;
-}
-
-bool rectanglesOverlap(const Quad& lhs, const Quad& rhs) {
-    const std::array<Point2, 4> axes = {{
-        {lhs[1][0] - lhs[0][0], lhs[1][1] - lhs[0][1]},
-        {lhs[2][0] - lhs[1][0], lhs[2][1] - lhs[1][1]},
-        {1.0, 0.0},
-        {0.0, 1.0}
-    }};
-
-    for (const Point2& axis : axes) {
-        if (!overlapsOnAxis(lhs, rhs, axis)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-Quad gridCellCorners(int x, int y) {
-    const double left = static_cast<double>(x);
-    const double bottom = static_cast<double>(y);
-    const double right = left + 1.0;
-    const double top = bottom + 1.0;
-    return {{
-        {left, bottom},
-        {right, bottom},
-        {right, top},
-        {left, top}
-    }};
-}
-
 /**
  * @brief 将连续航向角离散化为分箱索引。
  * @param[in] theta 连续航向角，弧度
@@ -168,20 +113,20 @@ std::int64_t makeKey(int x_index, int y_index, int theta_index) {
 
 /**
  * @brief 根据连续位姿和配置构造搜索节点。
- * @param[in] pose   连续位姿
- * @param[in] map    栅格地图（用于计算启发式）
- * @param[in] config 规划器配置
- * @return 初始化后的 Node，g 为 0，h 为到目标的欧几里得距离
+ * @param[in] pose      连续位姿
+ * @param[in] config    规划器配置
+ * @param[in] heuristic 启发函数
+ * @return 初始化后的 Node，g 为 0，h 由启发函数估计
  */
 Node makeNode(const CarPose& pose,
-              const GridMap& map,
-              const HybridAstarConfig& config) {
+              const HybridAstarConfig& config,
+              const Heuristic& heuristic) {
     Node node;
     node.pose = pose;
     node.x_index = static_cast<int>(std::floor(pose.x / config.xy_resolution));
     node.y_index = static_cast<int>(std::floor(pose.y / config.xy_resolution));
     node.theta_index = thetaIndex(pose.theta, config.theta_bins);
-    node.h = distance2d(pose.x, pose.y, map.goal().x, map.goal().y);
+    node.h = heuristic.estimate(pose);
     node.f = node.g + node.h;
     return node;
 }
@@ -200,61 +145,28 @@ bool isGoal(const CarPose& pose,
 }
 
 /**
- * @brief 检查车辆矩形 footprint 是否与障碍栅格相交。
- */
-bool collidesVehicle(const GridMap& map, const Car& car, const CarPose& pose) {
-    const Quad corners = car.bodyCorners(pose);
-
-    double min_x = corners[0][0];
-    double max_x = corners[0][0];
-    double min_y = corners[0][1];
-    double max_y = corners[0][1];
-    for (const Point2& corner : corners) {
-        min_x = std::min(min_x, corner[0]);
-        max_x = std::max(max_x, corner[0]);
-        min_y = std::min(min_y, corner[1]);
-        max_y = std::max(max_y, corner[1]);
-    }
-
-    const int x0 = static_cast<int>(std::floor(min_x));
-    const int x1 = static_cast<int>(std::floor(max_x));
-    const int y0 = static_cast<int>(std::floor(min_y));
-    const int y1 = static_cast<int>(std::floor(max_y));
-
-    for (int y = y0; y <= y1; ++y) {
-        for (int x = x0; x <= x1; ++x) {
-            if (map.isObstacle(x, y)
-                && rectanglesOverlap(corners, gridCellCorners(x, y))) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-/**
  * @brief 计算子节点的 g、h、f 代价并写入 Node。
  *
  * g 包含运动基元长度、倒车惩罚和转向惩罚。
- * h 使用欧几里得距离启发式。
+ * h 由注入的启发函数计算。
  *
  * @param[in,out] node      待更新的子节点
  * @param[in]     parent_g  父节点累计代价 g
  * @param[in]     direction 行驶方向
  * @param[in]     steer     前轮转向角
  * @param[in]     config    规划器配置
- * @param[in]     map       栅格地图
+ * @param[in]     heuristic 启发函数
  */
 void computeCost(Node& node,
                  double parent_g,
                  int direction,
                  double steer,
                  const HybridAstarConfig& config,
-                 const GridMap& map) {
+                 const Heuristic& heuristic) {
     const double reverse_cost = direction < 0 ? config.reverse_penalty : 1.0;
     const double steer_cost = 1.0 + std::abs(steer) * config.steer_penalty;
     node.g = parent_g + config.primitive_length * reverse_cost * steer_cost;
-    node.h = distance2d(node.pose.x, node.pose.y, map.goal().x, map.goal().y);
+    node.h = heuristic.estimate(node.pose);
     node.f = node.g + node.h;
 }
 
@@ -290,11 +202,20 @@ std::vector<CarPose> reconstructPath(const std::vector<Node>& nodes, int goal_id
 
 } // namespace
 
-HybridAstar::HybridAstar(HybridAstarConfig config)
-    : config_(config) {}
+HybridAstar::HybridAstar(HybridAstarConfig config,
+                         std::shared_ptr<Heuristic> heuristic)
+    : config_(config),
+      heuristic_(std::move(heuristic)) {
+    if (!heuristic_) {
+        heuristic_ = std::make_shared<EuclideanHeuristic>();
+    }
+}
 
 PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     PlanResult result;
+    heuristic_->prepare(map, car, config_);
+    const Heuristic& heuristic = *heuristic_;
+    const VehicleCollisionChecker collision_checker(map, car);
 
     // ------------------------------------------------------------------
     // 1. 初始化起点
@@ -307,14 +228,14 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
         .direction = 1
     };
 
-    if (collidesVehicle(map, car, start)) {
+    if (collision_checker.collides(start)) {
         return result; // 起点在障碍物内，直接返回失败
     }
 
     std::vector<Node> nodes;
     nodes.reserve(4096);
 
-    Node start_node = makeNode(start, map, config_);
+    Node start_node = makeNode(start, config_, heuristic);
     start_node.g = 0.0;
     start_node.f = start_node.h;
     nodes.push_back(start_node);
@@ -383,7 +304,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                     pose = car.step(pose, steer, direction, config_.step_size);
                     pose.theta = normalizeAngle(pose.theta);
 
-                    if (collidesVehicle(map, car, pose)) {
+                    if (collision_checker.collides(pose)) {
                         collision = true;
                         break;
                     }
@@ -395,12 +316,12 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 }
 
                 // 5.2 构造子节点
-                Node next = makeNode(pose, map, config_);
+                Node next = makeNode(pose, config_, heuristic);
                 next.parent = current_id;
                 next.segment = std::move(segment);
 
                 // 5.3 计算代价（含倒车和转向惩罚）
-                computeCost(next, current.g, direction, steer, config_, map);
+                computeCost(next, current.g, direction, steer, config_, heuristic);
 
                 // 5.4 去重：检查 closed set 和 best_g
                 const std::int64_t next_key = makeKey(
