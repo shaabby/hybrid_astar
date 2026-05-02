@@ -1,12 +1,14 @@
 #include "HybridAstar.hpp"
 #include "CollisionChecker.hpp"
 #include "Heuristic.hpp"
+#include "ReedsShepp.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
@@ -144,6 +146,39 @@ bool isGoal(const CarPose& pose,
         && angleDiff(pose.theta, goal.theta) <= config.goal_theta_tolerance;
 }
 
+bool shouldTryAnalyticExpansion(const CarPose& pose,
+                                const GridMap& map,
+                                const HybridAstarConfig& config,
+                                int iterations) {
+    if (!config.enable_analytic_expansion) {
+        return false;
+    }
+
+    const int interval = std::max(1, config.analytic_expansion_interval);
+    if (iterations % interval != 0) {
+        return false;
+    }
+
+    const Pose2D& goal = map.goal();
+    return distance2d(pose.x, pose.y, goal.x, goal.y)
+        <= config.analytic_expansion_distance;
+}
+
+std::optional<ReedsSheppPath> tryAnalyticExpansion(
+    const ReedsSheppGenerator& generator,
+    const CarPose& pose,
+    const GridMap& map,
+    const ReedsSheppCollisionChecker& collision_checker) {
+    const std::optional<ReedsSheppPath> candidate = generator.generate(
+        pose, map.goal());
+
+    if (!candidate || !collision_checker.isCollisionFree(*candidate)) {
+        return std::nullopt;
+    }
+
+    return candidate;
+}
+
 /**
  * @brief 计算子节点的 g、h、f 代价并写入 Node。
  *
@@ -215,7 +250,18 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     PlanResult result;
     heuristic_->prepare(map, car, config_);
     const Heuristic& heuristic = *heuristic_;
-    const VehicleCollisionChecker collision_checker(map, car);
+    VehicleCollisionConfig collision_config;
+    collision_config.safety_margin = config_.collision_safety_margin;
+    const VehicleCollisionChecker collision_checker(map, car, collision_config);
+
+    ReedsSheppCollisionConfig rs_collision_config;
+    rs_collision_config.vehicle = collision_config;
+    const ReedsSheppCollisionChecker rs_collision_checker(
+        map, car, rs_collision_config);
+    const ReedsSheppGenerator rs_generator(
+        car.minTurningRadius(),
+        config_.step_size,
+        car.maxSteer());
 
     // ------------------------------------------------------------------
     // 1. 初始化起点
@@ -287,6 +333,26 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
             result.success = true;
             result.path = reconstructPath(nodes, current_id);
             return result;
+        }
+
+        // Reeds-Shepp analytic expansion: 在接近目标时尝试直接连接终点。
+        //
+        // 当前生成器仍是最小实现（Dubins + reverse-Dubins 候选），后续优化点：
+        // 1. 补齐完整 Reeds-Shepp cusp words；
+        // 2. 加入倒车、换挡、转向变化等代价后再选择候选；
+        // 3. 按距离、启发式收益或失败历史自适应触发。
+        if (shouldTryAnalyticExpansion(
+                current.pose, map, config_, iterations)) {
+            if (const std::optional<ReedsSheppPath> analytic_path =
+                    tryAnalyticExpansion(rs_generator, current.pose, map,
+                                         rs_collision_checker)) {
+                result.success = true;
+                result.path = reconstructPath(nodes, current_id);
+                result.path.insert(result.path.end(),
+                                   analytic_path->samples.begin(),
+                                   analytic_path->samples.end());
+                return result;
+            }
         }
 
         // ------------------------------------------------------------------
