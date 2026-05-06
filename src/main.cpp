@@ -1,9 +1,11 @@
 #include "Car.hpp"
+#include "ExperimentLogger.hpp"
 #include "GridMap.hpp"
 #include "HtmlWriter.hpp"
 #include "HybridAstar.hpp"
 #include "JsonExporter.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -30,13 +32,28 @@ int main(int argc, char* argv[]) {
                                          : "map/default_map.json";
         const GridMap map = MapLoader::loadJson(map_path);
         const Car car;
-        const HybridAstar planner;
+        const HybridAstarConfig config;
+        const HybridAstar planner(config);
+        const auto plan_start = std::chrono::steady_clock::now();
         const PlanResult plan = planner.plan(map, car);
+        const auto plan_end = std::chrono::steady_clock::now();
+
+        std::filesystem::create_directories("output");
+        ExperimentLogEntry log_entry;
+        log_entry.map_path = map_path;
+        log_entry.success = plan.success;
+        log_entry.path_poses = plan.path.size();
+        log_entry.expanded_nodes = plan.expanded.size();
+        log_entry.runtime_ms = std::chrono::duration<double, std::milli>(
+            plan_end - plan_start).count();
+        log_entry.heuristic_name = planner.heuristicName();
+        ExperimentLogger::appendCsv(
+            "output/experiments.csv", log_entry, map, config);
+
         if (!plan.success) {
             throw std::runtime_error("Hybrid A* failed to find a path");
         }
 
-        std::filesystem::create_directories("output");
         const std::string json = JsonExporter::exportPath(
             map, car, plan.path, plan.expanded);
         writeTextFile("output/result.json", json);
@@ -56,8 +73,10 @@ int main(int argc, char* argv[]) {
         std::cout << "Generated Hybrid A* path\n";
         std::cout << "  poses: " << plan.path.size() << '\n';
         std::cout << "  expanded: " << plan.expanded.size() << '\n';
+        std::cout << "  runtime_ms: " << log_entry.runtime_ms << '\n';
         std::cout << "  output/result.json\n";
         std::cout << "  output/demo.html\n";
+        std::cout << "  output/experiments.csv\n";
 
         return 0;
     } catch (const std::exception& error) {

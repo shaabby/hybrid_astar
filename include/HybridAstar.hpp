@@ -63,6 +63,7 @@ public:
      * @return 规划结果，包含路径和扩展节点
      */
     [[nodiscard]] PlanResult plan(const GridMap& map, const Car& car) const;
+    [[nodiscard]] std::string heuristicName() const;
 
 private:
     HybridAstarConfig config_;

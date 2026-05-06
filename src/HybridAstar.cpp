@@ -433,3 +433,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     // 达到最大迭代次数仍未找到路径，返回失败
     return result;
 }
+
+std::string HybridAstar::heuristicName() const {
+    return heuristic_ ? heuristic_->name() : "unknown";
+}

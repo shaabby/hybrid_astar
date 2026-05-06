@@ -69,6 +69,14 @@ cmake --build build --config Release
 output/demo.html
 ```
 
+每次运行还会追加一行简要实验日志：
+
+```text
+output/experiments.csv
+```
+
+日志包含地图路径、是否成功、路径点数量、扩展节点数量、规划耗时、起终点位姿、主要代价参数和启发式名称，方便对比不同参数或地图下的规划效果。
+
 Windows 使用 Visual Studio 生成器时，可执行文件通常在：
 
 ```text
