@@ -52,6 +52,14 @@ public:
         const CarPose& start,
         const CarPose& goal) const;
 
+    [[nodiscard]] std::optional<double> estimateDistance(
+        const CarPose& start,
+        const Pose2D& goal) const;
+
+    [[nodiscard]] std::optional<double> estimateDistance(
+        const CarPose& start,
+        const CarPose& goal) const;
+
 private:
     double min_turning_radius_ = 1.0;
     double sample_step_ = 0.2;

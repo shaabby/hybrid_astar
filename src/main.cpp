@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     try {
         const std::string map_path = argc > 1
                                          ? argv[1]
-                                         : "map/hybrid_astar_map_defalt.json";
+                                         : "map/default_map.json";
         const GridMap map = MapLoader::loadJson(map_path);
         const Car car;
         const HybridAstar planner;

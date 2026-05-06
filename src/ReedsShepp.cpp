@@ -395,3 +395,41 @@ std::optional<ReedsSheppPath> ReedsSheppGenerator::generate(
             return lhs.total_length < rhs.total_length;
         });
 }
+
+std::optional<double> ReedsSheppGenerator::estimateDistance(
+    const CarPose& start,
+    const Pose2D& goal) const {
+    CarPose goal_pose;
+    goal_pose.x = goal.x;
+    goal_pose.y = goal.y;
+    goal_pose.theta = goal.theta;
+    goal_pose.direction = 1;
+    return estimateDistance(start, goal_pose);
+}
+
+std::optional<double> ReedsSheppGenerator::estimateDistance(
+    const CarPose& start,
+    const CarPose& goal) const {
+    if (min_turning_radius_ <= kEpsilon) {
+        return std::nullopt;
+    }
+
+    std::optional<double> best_length;
+    const auto update_best = [&best_length](double length) {
+        if (!best_length || length < *best_length) {
+            best_length = length;
+        }
+    };
+
+    for (const DubinsCandidate& candidate
+         : makeDubinsCandidates(start, goal, min_turning_radius_)) {
+        update_best(pathLength(toSegments(candidate, min_turning_radius_)));
+    }
+
+    for (const DubinsCandidate& candidate
+         : makeDubinsCandidates(goal, start, min_turning_radius_)) {
+        update_best(pathLength(toSegments(candidate, min_turning_radius_)));
+    }
+
+    return best_length;
+}

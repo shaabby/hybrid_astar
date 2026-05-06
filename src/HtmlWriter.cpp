@@ -62,7 +62,7 @@ std::string HtmlWriter::wrap(const std::string& json) {
 <body>
   <main>
     <div class="bar">
-      <h1>Hybrid A* Output Loop Demo: Straight Vehicle Motion</h1>
+      <h1>Hybrid A* Path Planning Demo</h1>
       <div class="controls">
         <button id="toggle" type="button">Pause</button>
         <button id="step" type="button">Step</button>

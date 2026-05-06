@@ -4,6 +4,7 @@
 #include "GridMap.hpp"
 
 #include <string>
+#include <vector>
 
 struct HybridAstarConfig;
 
@@ -41,4 +42,35 @@ public:
 
 private:
     Pose2D goal_;
+};
+
+/**
+ * @brief 组合启发函数。
+ *
+ * h = max(h_non_obs, h_obs)，其中 h_non_obs 使用无障碍 Reeds-Shepp 风格距离，
+ * h_obs 使用膨胀障碍图上的二维 Dijkstra cost-to-go。
+ */
+class CombinedHeuristic final : public Heuristic {
+public:
+    void prepare(const GridMap& map,
+                 const Car& car,
+                 const HybridAstarConfig& config) override;
+
+    [[nodiscard]] double estimate(const CarPose& pose) const override;
+    [[nodiscard]] std::string name() const override;
+
+private:
+    [[nodiscard]] double euclidean(const CarPose& pose) const;
+    [[nodiscard]] double obstacleEstimate(const CarPose& pose) const;
+    [[nodiscard]] double nonObstacleEstimate(const CarPose& pose) const;
+
+    Pose2D goal_;
+    int width_ = 0;
+    int height_ = 0;
+    double xy_resolution_ = 1.0;
+    double min_turning_radius_ = 1.0;
+    double reeds_shepp_sample_step_ = 0.2;
+    double max_steer_ = 0.0;
+    bool obstacle_enabled_ = false;
+    std::vector<double> obstacle_distance_;
 };
