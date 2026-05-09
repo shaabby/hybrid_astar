@@ -11,6 +11,8 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kTwoPi = 2.0 * kPi;
 constexpr double kEpsilon = 1.0e-9;
 constexpr double kInfinity = std::numeric_limits<double>::infinity();
+constexpr double kSnapPositionTolerance = 1.0e-4;
+constexpr double kSnapThetaTolerance = 1.0e-4;
 
 double mod2pi(double angle) {
     double result = std::fmod(angle, kTwoPi);
@@ -38,6 +40,12 @@ double pathLength(const std::vector<ReedsSheppSegment>& segments) {
     return length;
 }
 
+double distance2d(double ax, double ay, double bx, double by) {
+    const double dx = ax - bx;
+    const double dy = ay - by;
+    return std::sqrt(dx * dx + dy * dy);
+}
+
 double tauOmega(double u, double v, double w) {
     if (std::abs(w) > kEpsilon) {
         const double cos_w = std::cos(w);
@@ -50,14 +58,34 @@ double tauOmega(double u, double v, double w) {
     return 0.0;
 }
 
+bool reachesGoal(const CarPose& pose,
+                 const CarPose& goal,
+                 double position_tolerance,
+                 double theta_tolerance) {
+    return distance2d(pose.x, pose.y, goal.x, goal.y)
+            <= position_tolerance
+        && std::abs(normalizeAngle(pose.theta - goal.theta))
+            <= theta_tolerance;
+}
+
+bool canSnapToGoal(const CarPose& pose, const CarPose& goal) {
+    return distance2d(pose.x, pose.y, goal.x, goal.y) <= kSnapPositionTolerance
+        && std::abs(normalizeAngle(pose.theta - goal.theta))
+            <= kSnapThetaTolerance;
+}
+
 } // namespace
 
 ReedsSheppGenerator::ReedsSheppGenerator(double min_turning_radius,
                                          double sample_step,
-                                         double max_steer)
+                                         double max_steer,
+                                         double goal_position_tolerance,
+                                         double goal_theta_tolerance)
     : min_turning_radius_(min_turning_radius),
       sample_step_(sample_step),
-      max_steer_(max_steer) {}
+      max_steer_(max_steer),
+      goal_position_tolerance_(goal_position_tolerance),
+      goal_theta_tolerance_(goal_theta_tolerance) {}
 
 ReedsSheppGenerator::LocalState ReedsSheppGenerator::toLocal(
     const CarPose& start, const Pose2D& goal, double radius) const {
@@ -1093,7 +1121,6 @@ ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rlrL3(
         return wc;
     }
 
-    const double p = std::sqrt(std::max(0.0, p1));
     const double t_val = std::atan2(-v, -u);
     const double u_mid = kPi - t_val;
     const double v_mid = mod2pi(t + t_val);
@@ -1127,7 +1154,6 @@ ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lrlR3(
         return wc;
     }
 
-    const double p = std::sqrt(std::max(0.0, p1));
     const double t_val = std::atan2(v, -u);
     const double u_mid = kPi + t_val;
     const double v_mid = mod2pi(t - t_val);
@@ -1634,16 +1660,28 @@ CarPose ReedsSheppGenerator::advancePose(const CarPose& pose,
     return next;
 }
 
+CarPose ReedsSheppGenerator::traceEndpoint(
+    const CarPose& start,
+    const std::vector<ReedsSheppSegment>& segments,
+    double radius) const {
+    CarPose pose = start;
+    for (const ReedsSheppSegment& seg : segments) {
+        pose = advancePose(
+            pose, seg.type, seg.direction, seg.length * radius, radius);
+        pose.theta = normalizeAngle(pose.theta);
+    }
+    return pose;
+}
+
 std::vector<CarPose> ReedsSheppGenerator::samplePath(
     const CarPose& start,
-    const CarPose& goal,
     const std::vector<ReedsSheppSegment>& segments,
     double radius) const {
     std::vector<CarPose> samples;
     CarPose pose = start;
 
     for (const ReedsSheppSegment& seg : segments) {
-        double remaining = std::abs(seg.length);
+        double remaining = std::abs(seg.length) * radius;
         const double sign = (seg.length < 0.0) ? -1.0 : 1.0;
 
         while (remaining > kEpsilon) {
@@ -1654,13 +1692,6 @@ std::vector<CarPose> ReedsSheppGenerator::samplePath(
         }
     }
 
-    if (samples.empty()) {
-        samples.push_back(goal);
-    } else {
-        samples.back().x = goal.x;
-        samples.back().y = goal.y;
-        samples.back().theta = normalizeAngle(goal.theta);
-    }
     return samples;
 }
 
@@ -1684,32 +1715,41 @@ std::optional<ReedsSheppPath> ReedsSheppGenerator::generate(
 
     const LocalState s = toLocal(start, goal, min_turning_radius_);
 
-    std::vector<WordCandidate> valid_candidates;
+    std::optional<ReedsSheppPath> best_path;
 
     for (int i = 0; i < WI_COUNT; ++i) {
         WordCandidate wc = generateWord(s, static_cast<WordIndex>(i));
-        if (wc.valid && wc.total_length < kInfinity) {
-            valid_candidates.push_back(wc);
+        if (!wc.valid || wc.total_length >= kInfinity) {
+            continue;
+        }
+
+        ReedsSheppPath candidate;
+        candidate.segments = std::move(wc.segments);
+        candidate.total_length = pathLength(candidate.segments)
+            * min_turning_radius_;
+        candidate.word = std::move(wc.word);
+
+        const CarPose end_pose = traceEndpoint(
+            start, candidate.segments, min_turning_radius_);
+        if (!reachesGoal(end_pose, goal, goal_position_tolerance_,
+                         goal_theta_tolerance_)) {
+            continue;
+        }
+
+        candidate.samples = samplePath(
+            start, candidate.segments, min_turning_radius_);
+        if (!candidate.samples.empty() && canSnapToGoal(candidate.samples.back(), goal)) {
+            candidate.samples.back().x = goal.x;
+            candidate.samples.back().y = goal.y;
+            candidate.samples.back().theta = normalizeAngle(goal.theta);
+        }
+
+        if (!best_path || candidate.total_length < best_path->total_length) {
+            best_path = std::move(candidate);
         }
     }
 
-    if (valid_candidates.empty()) {
-        return std::nullopt;
-    }
-
-    auto best = std::min_element(
-        valid_candidates.begin(), valid_candidates.end(),
-        [](const WordCandidate& lhs, const WordCandidate& rhs) {
-            return lhs.total_length < rhs.total_length;
-        });
-
-    ReedsSheppPath result;
-    result.segments = best->segments;
-    result.total_length = best->total_length;
-    result.word = best->word;
-    result.samples = samplePath(start, goal, result.segments, min_turning_radius_);
-
-    return result;
+    return best_path;
 }
 
 std::optional<double> ReedsSheppGenerator::estimateDistance(
@@ -1736,7 +1776,8 @@ std::optional<double> ReedsSheppGenerator::estimateDistance(
 
     for (int i = 0; i < WI_COUNT; ++i) {
         WordCandidate wc = generateWord(s, static_cast<WordIndex>(i));
-        if (wc.valid && (!best_length || wc.total_length < *best_length)) {
+        if (wc.valid && wc.total_length < kInfinity
+            && (!best_length || wc.total_length < *best_length)) {
             best_length = wc.total_length;
         }
     }

@@ -278,7 +278,9 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     const ReedsSheppGenerator rs_generator(
         car.minTurningRadius(),
         config_.step_size,
-        car.maxSteer());
+        car.maxSteer(),
+        config_.goal_xy_tolerance,
+        config_.goal_theta_tolerance);
 
     // ------------------------------------------------------------------
     // 1. 初始化起点
@@ -392,6 +394,14 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                         break;
                     }
                     segment.push_back(pose);
+
+                    if (isGoal(pose, map, config_)) {
+                        result.success = true;
+                        result.path = reconstructPath(nodes, current_id);
+                        result.path.insert(result.path.end(),
+                                           segment.begin(), segment.end());
+                        return result;
+                    }
                 }
 
                 if (collision || segment.empty()) {

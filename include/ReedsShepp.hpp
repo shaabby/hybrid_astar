@@ -35,7 +35,9 @@ class ReedsSheppGenerator {
 public:
     ReedsSheppGenerator(double min_turning_radius,
                         double sample_step,
-                        double max_steer = 0.0);
+                        double max_steer = 0.0,
+                        double goal_position_tolerance = 1.0e-4,
+                        double goal_theta_tolerance = 1.0e-4);
 
     [[nodiscard]] std::optional<ReedsSheppPath> generate(
         const CarPose& start,
@@ -57,6 +59,8 @@ private:
     double min_turning_radius_ = 1.0;
     double sample_step_ = 0.2;
     double max_steer_ = 0.0;
+    double goal_position_tolerance_ = 1.0e-4;
+    double goal_theta_tolerance_ = 1.0e-4;
 
     enum WordIndex {
         WI_LSL = 0, WI_RSR, WI_LSR, WI_RSL,
@@ -151,8 +155,11 @@ private:
                         double distance,
                         double radius) const;
 
+    CarPose traceEndpoint(const CarPose& start,
+                          const std::vector<ReedsSheppSegment>& segments,
+                          double radius) const;
+
     std::vector<CarPose> samplePath(const CarPose& start,
-                                    const CarPose& goal,
                                     const std::vector<ReedsSheppSegment>& segments,
                                     double radius) const;
 };

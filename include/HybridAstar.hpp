@@ -16,8 +16,8 @@ struct HybridAstarConfig {
     int theta_bins = 72;                ///< 航向角离散分箱数
     double step_size = 0.2;             ///< 数值积分步长
     double primitive_length = 1.2;      ///< 单个运动基元长度
-    double goal_xy_tolerance = 1.8;     ///< 目标位置容差
-    double goal_theta_tolerance = 0.7;  ///< 目标航向角容差，弧度
+    double goal_xy_tolerance = 0.2;     ///< 目标位置容差
+    double goal_theta_tolerance = 0.05;  ///< 目标航向角容差，弧度
     double reverse_penalty = 1.4;       ///< 倒车代价惩罚系数
     double steer_penalty = 0.15;        ///< 转向代价惩罚系数
     double gear_switch_penalty = 4.0;   ///< 前进/倒车切换惩罚

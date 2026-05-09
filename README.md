@@ -57,6 +57,15 @@ cmake --build build --config Release
 ./build/hybrid_astar
 ```
 
+默认会在规划完成后打开 FLTK 动画窗口，同时仍然生成
+`output/result.json` 和 `output/demo.html`，方便用浏览器页面对照调试。
+
+只生成输出文件、不打开 FLTK 窗口：
+
+```bash
+./build/hybrid_astar --no-view
+```
+
 指定地图：
 
 ```bash
