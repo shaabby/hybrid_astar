@@ -1,5 +1,7 @@
 /build
 .codex
+third_party/**/build/
+third_party/**/cmake-build-*/
 design.md
 help.md
 src/main
