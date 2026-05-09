@@ -1,8 +1,9 @@
 #include "ReedsShepp.hpp"
 
+#include "OmplReedsShepp.hpp"
+
 #include <algorithm>
 #include <cmath>
-#include <vector>
 #include <limits>
 
 namespace {
@@ -10,17 +11,8 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kTwoPi = 2.0 * kPi;
 constexpr double kEpsilon = 1.0e-9;
-constexpr double kInfinity = std::numeric_limits<double>::infinity();
 constexpr double kSnapPositionTolerance = 1.0e-4;
 constexpr double kSnapThetaTolerance = 1.0e-4;
-
-double mod2pi(double angle) {
-    double result = std::fmod(angle, kTwoPi);
-    if (result < 0.0) {
-        result += kTwoPi;
-    }
-    return result;
-}
 
 double normalizeAngle(double angle) {
     while (angle <= -kPi) {
@@ -32,46 +24,98 @@ double normalizeAngle(double angle) {
     return angle;
 }
 
-double pathLength(const std::vector<ReedsSheppSegment>& segments) {
-    double length = 0.0;
-    for (const ReedsSheppSegment& seg : segments) {
-        length += std::abs(seg.length);
-    }
-    return length;
-}
-
 double distance2d(double ax, double ay, double bx, double by) {
     const double dx = ax - bx;
     const double dy = ay - by;
     return std::sqrt(dx * dx + dy * dy);
 }
 
-double tauOmega(double u, double v, double w) {
-    if (std::abs(w) > kEpsilon) {
-        const double cos_w = std::cos(w);
-        const double numerator = u * u + v * v - 2.0 * u * v * cos_w;
-        if (numerator >= 0.0) {
-            return std::acos(std::clamp((u * u + v * v - 2.0 * u * v * cos_w) /
-                                       (2.0 * u * v), -1.0, 1.0)) / w;
-        }
-    }
-    return 0.0;
-}
-
 bool reachesGoal(const CarPose& pose,
                  const CarPose& goal,
                  double position_tolerance,
                  double theta_tolerance) {
-    return distance2d(pose.x, pose.y, goal.x, goal.y)
-            <= position_tolerance
-        && std::abs(normalizeAngle(pose.theta - goal.theta))
-            <= theta_tolerance;
+    return distance2d(pose.x, pose.y, goal.x, goal.y) <= position_tolerance
+        && std::abs(normalizeAngle(pose.theta - goal.theta)) <= theta_tolerance;
 }
 
 bool canSnapToGoal(const CarPose& pose, const CarPose& goal) {
     return distance2d(pose.x, pose.y, goal.x, goal.y) <= kSnapPositionTolerance
         && std::abs(normalizeAngle(pose.theta - goal.theta))
             <= kSnapThetaTolerance;
+}
+
+ompl_rs::State toNormalizedState(const CarPose& pose, double radius) {
+    return {
+        pose.x / radius,
+        pose.y / radius,
+        normalizeAngle(pose.theta)
+    };
+}
+
+CarPose toCarPose(const ompl_rs::State& state,
+                  double radius,
+                  double steer,
+                  int direction) {
+    return {
+        .x = state.x * radius,
+        .y = state.y * radius,
+        .theta = normalizeAngle(state.yaw),
+        .steer = steer,
+        .direction = direction
+    };
+}
+
+ReedsSheppSegmentType convertType(ompl_rs::SegmentType type) {
+    switch (type) {
+    case ompl_rs::SegmentType::Left:
+        return ReedsSheppSegmentType::Left;
+    case ompl_rs::SegmentType::Right:
+        return ReedsSheppSegmentType::Right;
+    case ompl_rs::SegmentType::Straight:
+    case ompl_rs::SegmentType::Nop:
+        return ReedsSheppSegmentType::Straight;
+    }
+    return ReedsSheppSegmentType::Straight;
+}
+
+double steerFor(ompl_rs::SegmentType type, double max_steer) {
+    switch (type) {
+    case ompl_rs::SegmentType::Left:
+        return max_steer;
+    case ompl_rs::SegmentType::Right:
+        return -max_steer;
+    case ompl_rs::SegmentType::Straight:
+    case ompl_rs::SegmentType::Nop:
+        return 0.0;
+    }
+    return 0.0;
+}
+
+struct SegmentControl {
+    ompl_rs::SegmentType type = ompl_rs::SegmentType::Straight;
+    int direction = 1;
+};
+
+SegmentControl controlAtDistance(const ompl_rs::Path& path, double distance) {
+    double travelled = 0.0;
+    SegmentControl last;
+
+    for (std::size_t i = 0; i < path.length.size(); ++i) {
+        if (path.type[i] == ompl_rs::SegmentType::Nop
+            || std::abs(path.length[i]) <= kEpsilon) {
+            continue;
+        }
+
+        last.type = path.type[i];
+        last.direction = path.length[i] < 0.0 ? -1 : 1;
+
+        travelled += std::abs(path.length[i]);
+        if (distance <= travelled + kEpsilon) {
+            return last;
+        }
+    }
+
+    return last;
 }
 
 } // namespace
@@ -87,1614 +131,6 @@ ReedsSheppGenerator::ReedsSheppGenerator(double min_turning_radius,
       goal_position_tolerance_(goal_position_tolerance),
       goal_theta_tolerance_(goal_theta_tolerance) {}
 
-ReedsSheppGenerator::LocalState ReedsSheppGenerator::toLocal(
-    const CarPose& start, const Pose2D& goal, double radius) const {
-    const double dx = goal.x - start.x;
-    const double dy = goal.y - start.y;
-    const double c = std::cos(start.theta);
-    const double s = std::sin(start.theta);
-    return {
-        (c * dx + s * dy) / radius,
-        (-s * dx + c * dy) / radius,
-        normalizeAngle(goal.theta - start.theta)
-    };
-}
-
-ReedsSheppGenerator::LocalState ReedsSheppGenerator::toLocal(
-    const CarPose& start, const CarPose& goal, double radius) const {
-    const double dx = goal.x - start.x;
-    const double dy = goal.y - start.y;
-    const double c = std::cos(start.theta);
-    const double s = std::sin(start.theta);
-    return {
-        (c * dx + s * dy) / radius,
-        (-s * dx + c * dy) / radius,
-        normalizeAngle(goal.theta - start.theta)
-    };
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsl(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2;
-
-    if (p1 <= kEpsilon) {
-        return wc;
-    }
-
-    const double p2 = 2.0 + u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-    if (p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p2 - v2));
-    const double t_val = std::atan2(v - p, u);
-    const double u_mid = u + p;
-    const double t_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && t_mid > kEpsilon && u_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Left, t_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + u_mid + t_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsr(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSR";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p2 = 2.0 + u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p2 - v2));
-    const double t_val = std::atan2(-v - p, u);
-    const double u_mid = u + p;
-    const double t_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && t_mid > kEpsilon && u_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, -t_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + u_mid - t_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsr(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSR";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-u * std::sin(t) + v * std::cos(t),
-                                     u * std::cos(t) + v * std::sin(t) - 2.0);
-    const double t_mid = mod2pi(t - t_val);
-    const double u_mid = u * std::cos(t_val) + v * std::sin(t_val);
-
-    if (t_val > kEpsilon && t_mid > kEpsilon && u_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, t_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + t_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsl(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(u * std::sin(t) - v * std::cos(t),
-                                     -u * std::cos(t) - v * std::sin(t) + 2.0);
-    const double t_mid = mod2pi(t - t_val);
-    const double u_mid = u * std::cos(t_val) - v * std::sin(t_val);
-
-    if (t_val < -kEpsilon && t_mid > kEpsilon && u_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Left, -t_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p - t_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rlr(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RLR";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = (6.0 - u2 - v2 + 2.0 * u * v * std::cos(t) +
-                       2.0 * u * std::sin(t) - 2.0 * v * std::cos(t)) / 8.0;
-
-    if (std::abs(p1) > 1.0 + kEpsilon) {
-        return wc;
-    }
-
-    const double p = mod2pi(2.0 * kPi - std::acos(std::clamp(p1, -1.0, 1.0)));
-    const double t_val = mod2pi(std::atan2(u, v) -
-                                 std::atan2(v * std::sin(t), u * std::cos(t) + v * std::sin(t)));
-    const double u_mid = mod2pi(t_val - t);
-    const double v_mid = mod2pi(-t_val + t + p);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lrl(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LRL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = (6.0 - u2 - v2 + 2.0 * u * v * std::cos(t) -
-                       2.0 * u * std::sin(t) + 2.0 * v * std::cos(t)) / 8.0;
-
-    if (std::abs(p1) > 1.0 + kEpsilon) {
-        return wc;
-    }
-
-    const double p = mod2pi(2.0 * kPi - std::acos(std::clamp(p1, -1.0, 1.0)));
-    const double t_val = mod2pi(std::atan2(-u, -v) +
-                                 std::atan2(v * std::cos(t) - u * std::sin(t),
-                                          u * std::cos(t) + v * std::sin(t)));
-    const double u_mid = mod2pi(-t_val + t);
-    const double v_mid = mod2pi(-t_val + t - p);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Left, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrsrs(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSRSRS";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double t_mid = mod2pi(t + t_val);
-    const double u_mid = kPi - t_val;
-
-    if (t_val < -kEpsilon && t_mid > kEpsilon && u_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, t_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, u_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (-t_val + p + t_mid + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rslrs(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSLRS";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-    const double p2 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(p1);
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + p2) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (-t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrlrs(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSRLRS";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-    const double p2 = -2.0 + p1;
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(p1);
-    const double t_val = std::atan2(v, u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + p1) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lslrs(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSLRS";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-    const double p2 = 2.0 + u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + p2) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsl3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSL|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsr3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSR|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrsl(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSRSL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (-t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rslrsl(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSLRSL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t))) / 2.0, -1.0, 1.0)));
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (-t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrlsl(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSRLSL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t))) / 2.0, -1.0, 1.0)));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lslrsl(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSLRSL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t))) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rslr3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSLR|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrr3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSRR|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lslr3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSLR|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rslr4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSLR*";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrr4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSRR*";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrl3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSRL|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrlr3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSRLR";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-    const double p2 = 16.0 - u2 - v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double p_mid = std::sqrt(std::max(0.0, p2)) / 2.0;
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = mod2pi(tauOmega(p, p_mid, t));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrirl3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSRIRL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-    const double p2 = 16.0 - p1;
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double p_mid = std::sqrt(std::max(0.0, p2)) / 2.0;
-    const double t_val = std::atan2(v, u);
-    const double u_mid = mod2pi(tauOmega(p, p_mid, t));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p_mid, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid + p_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrlr4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSRLR*";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-    const double p2 = 16.0 - p1;
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double p_mid = std::sqrt(std::max(0.0, p2)) / 2.0;
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = mod2pi(tauOmega(p, p_mid, t));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrirl4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSRIRL*";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-    const double p2 = 16.0 - p1;
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double p_mid = std::sqrt(std::max(0.0, p2)) / 2.0;
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = mod2pi(tauOmega(p, p_mid, t));
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p_mid, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, -v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid + p_mid - v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lrlr3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LRLR|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Left, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rlrl3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RLRL|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rlrL3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RLR|L";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lrlR3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LRL|R";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Left, v_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lslS3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSL|S";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-    const double p2 = 2.0 + u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon || p2 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + p2) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrS3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSR|S";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-    const double p2 = 2.0 + u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon || p2 < kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + p2) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrS3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSR|S";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rslS3(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSL|S";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrSl4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSR|SL";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (-t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rslRs4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSL|RS";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + u2 + v2 + 2.0 * (u * std::cos(t) - v * std::sin(t))) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (-t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrsl4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSRSL*";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lslRs4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSL|RS";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = -2.0 + u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = mod2pi(std::acos(std::clamp((-2.0 + u2 + v2 - 2.0 * (u * std::cos(t) - v * std::sin(t))) / (2.0 * p), -1.0, 1.0)));
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon && p > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, v_mid, ReedsSheppDirection::Backward}
-        };
-        wc.total_length = (t_val + p + u_mid + v_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rsrs4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSRS|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 + 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsls4(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSLS|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 - 2.0 * (u * std::cos(t) + v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::rslr5(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "RSLR|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 + 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(-v, -u);
-    const double u_mid = kPi - t_val;
-    const double v_mid = mod2pi(t + t_val);
-
-    if (t_val < -kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Right, -t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Left, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (-t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::lsrr5(
-    const LocalState& s) const {
-    WordCandidate wc;
-    wc.word = "LSRR|";
-
-    const double u = s.x;
-    const double v = s.y;
-    const double t = mod2pi(s.theta);
-
-    const double u2 = u * u;
-    const double v2 = v * v;
-    const double p1 = 4.0 - u2 - v2 - 2.0 * (u * std::cos(t) - v * std::sin(t));
-
-    if (p1 < -kEpsilon) {
-        return wc;
-    }
-
-    const double p = std::sqrt(std::max(0.0, p1));
-    const double t_val = std::atan2(v, -u);
-    const double u_mid = kPi + t_val;
-    const double v_mid = mod2pi(t - t_val);
-
-    if (t_val > kEpsilon && u_mid > kEpsilon && v_mid > kEpsilon) {
-        wc.segments = {
-            {ReedsSheppSegmentType::Left, t_val, ReedsSheppDirection::Forward},
-            {ReedsSheppSegmentType::Straight, p, ReedsSheppDirection::Backward},
-            {ReedsSheppSegmentType::Right, u_mid, ReedsSheppDirection::Forward}
-        };
-        wc.total_length = (t_val + p + u_mid) * min_turning_radius_;
-        wc.valid = true;
-    }
-    return wc;
-}
-
-ReedsSheppGenerator::WordCandidate ReedsSheppGenerator::generateWord(
-    const LocalState& s, WordIndex idx) const {
-    switch (idx) {
-    case WI_LSL: return lsl(s);
-    case WI_RSR: return rsr(s);
-    case WI_LSR: return lsr(s);
-    case WI_RSL: return rsl(s);
-    case WI_RLR: return rlr(s);
-    case WI_LRL: return lrl(s);
-    case WI_RSRSRS: return rsrsrs(s);
-    case WI_RSLRS: return rslrs(s);
-    case WI_LSRLS: return lsrlrs(s);
-    case WI_LSLRS: return lslrs(s);
-    case WI_RSL3: return rsl3(s);
-    case WI_LSR3: return lsr3(s);
-    case WI_RSRSL: return rsrsl(s);
-    case WI_RSLRSL: return rslrsl(s);
-    case WI_LSRLSL: return lsrlsl(s);
-    case WI_LSLRSL: return lslrsl(s);
-    case WI_RSLR3: return rslr3(s);
-    case WI_LSRR3: return lsrr3(s);
-    case WI_LSLR3: return lslr3(s);
-    case WI_RSLR4: return rslr4(s);
-    case WI_LSRR4: return lsrr4(s);
-    case WI_RSRL3: return rsrl3(s);
-    case WI_RSRLR3: return rsrlr3(s);
-    case WI_LSRIRL3: return lsrirl3(s);
-    case WI_RSRLR4: return rsrlr4(s);
-    case WI_LSRIRL4: return lsrirl4(s);
-    case WI_LRLR3: return lrlr3(s);
-    case WI_RLRL3: return rlrl3(s);
-    case WI_RLR_L3: return rlrL3(s);
-    case WI_LRL_R3: return lrlR3(s);
-    case WI_LSL_S3: return lslS3(s);
-    case WI_RSR_S3: return rsrS3(s);
-    case WI_LSR_S3: return lsrS3(s);
-    case WI_RSL_S3: return rslS3(s);
-    case WI_RSR_SL4: return rsrSl4(s);
-    case WI_RSL_RS4: return rslRs4(s);
-    case WI_RSRSL4: return rsrsl4(s);
-    case WI_LSL_RS4: return lslRs4(s);
-    case WI_RSRS4: return rsrs4(s);
-    case WI_LSLS4: return lsls4(s);
-    case WI_RSLR5: return rslr5(s);
-    case WI_LSRR5: return lsrr5(s);
-    default: return {};
-    }
-}
-
-CarPose ReedsSheppGenerator::advancePose(const CarPose& pose,
-                                        ReedsSheppSegmentType type,
-                                        ReedsSheppDirection dir,
-                                        double distance,
-                                        double radius) const {
-    CarPose next = pose;
-    next.direction = (dir == ReedsSheppDirection::Forward) ? 1 : -1;
-    const double signed_dist = next.direction * distance;
-
-    if (type == ReedsSheppSegmentType::Straight) {
-        next.x += signed_dist * std::cos(pose.theta);
-        next.y += signed_dist * std::sin(pose.theta);
-        next.steer = 0.0;
-        return next;
-    }
-
-    const double turn_sign = (type == ReedsSheppSegmentType::Left) ? 1.0 : -1.0;
-    const double curvature = turn_sign / radius;
-    const double next_theta = pose.theta + curvature * signed_dist;
-
-    next.x += (1.0 / curvature) * (std::sin(next_theta) - std::sin(pose.theta));
-    next.y += (1.0 / curvature) * (std::cos(pose.theta) - std::cos(next_theta));
-    next.theta = normalizeAngle(next_theta);
-    next.steer = turn_sign * max_steer_;
-    return next;
-}
-
-CarPose ReedsSheppGenerator::traceEndpoint(
-    const CarPose& start,
-    const std::vector<ReedsSheppSegment>& segments,
-    double radius) const {
-    CarPose pose = start;
-    for (const ReedsSheppSegment& seg : segments) {
-        pose = advancePose(
-            pose, seg.type, seg.direction, seg.length * radius, radius);
-        pose.theta = normalizeAngle(pose.theta);
-    }
-    return pose;
-}
-
-std::vector<CarPose> ReedsSheppGenerator::samplePath(
-    const CarPose& start,
-    const std::vector<ReedsSheppSegment>& segments,
-    double radius) const {
-    std::vector<CarPose> samples;
-    CarPose pose = start;
-
-    for (const ReedsSheppSegment& seg : segments) {
-        double remaining = std::abs(seg.length) * radius;
-        const double sign = (seg.length < 0.0) ? -1.0 : 1.0;
-
-        while (remaining > kEpsilon) {
-            const double step = std::min(sample_step_, remaining);
-            pose = advancePose(pose, seg.type, seg.direction, sign * step, radius);
-            samples.push_back(pose);
-            remaining -= step;
-        }
-    }
-
-    return samples;
-}
-
 std::optional<ReedsSheppPath> ReedsSheppGenerator::generate(
     const CarPose& start,
     const Pose2D& goal) const {
@@ -1709,47 +145,79 @@ std::optional<ReedsSheppPath> ReedsSheppGenerator::generate(
 std::optional<ReedsSheppPath> ReedsSheppGenerator::generate(
     const CarPose& start,
     const CarPose& goal) const {
-    if (min_turning_radius_ <= kEpsilon || sample_step_ <= kEpsilon) {
+    if (min_turning_radius_ <= kEpsilon || sample_step_ <= kEpsilon
+        || !std::isfinite(min_turning_radius_)) {
         return std::nullopt;
     }
 
-    const LocalState s = toLocal(start, goal, min_turning_radius_);
+    const ompl_rs::State normalized_start =
+        toNormalizedState(start, min_turning_radius_);
+    const ompl_rs::State normalized_goal =
+        toNormalizedState(goal, min_turning_radius_);
+    const ompl_rs::Path vendor_path =
+        ompl_rs::shortestPath(normalized_start, normalized_goal);
 
-    std::optional<ReedsSheppPath> best_path;
-
-    for (int i = 0; i < WI_COUNT; ++i) {
-        WordCandidate wc = generateWord(s, static_cast<WordIndex>(i));
-        if (!wc.valid || wc.total_length >= kInfinity) {
-            continue;
-        }
-
-        ReedsSheppPath candidate;
-        candidate.segments = std::move(wc.segments);
-        candidate.total_length = pathLength(candidate.segments)
-            * min_turning_radius_;
-        candidate.word = std::move(wc.word);
-
-        const CarPose end_pose = traceEndpoint(
-            start, candidate.segments, min_turning_radius_);
-        if (!reachesGoal(end_pose, goal, goal_position_tolerance_,
-                         goal_theta_tolerance_)) {
-            continue;
-        }
-
-        candidate.samples = samplePath(
-            start, candidate.segments, min_turning_radius_);
-        if (!candidate.samples.empty() && canSnapToGoal(candidate.samples.back(), goal)) {
-            candidate.samples.back().x = goal.x;
-            candidate.samples.back().y = goal.y;
-            candidate.samples.back().theta = normalizeAngle(goal.theta);
-        }
-
-        if (!best_path || candidate.total_length < best_path->total_length) {
-            best_path = std::move(candidate);
-        }
+    if (!std::isfinite(vendor_path.total_length)
+        || vendor_path.total_length <= kEpsilon) {
+        return std::nullopt;
     }
 
-    return best_path;
+    ReedsSheppPath result;
+    result.total_length = vendor_path.total_length * min_turning_radius_;
+    result.word = "OMPL_RS_" + std::to_string(vendor_path.type_index);
+
+    for (std::size_t i = 0; i < vendor_path.length.size(); ++i) {
+        if (vendor_path.type[i] == ompl_rs::SegmentType::Nop
+            || std::abs(vendor_path.length[i]) <= kEpsilon) {
+            continue;
+        }
+        result.segments.push_back({
+            .type = convertType(vendor_path.type[i]),
+            .length = vendor_path.length[i] * min_turning_radius_,
+            .direction = vendor_path.length[i] < 0.0
+                ? ReedsSheppDirection::Backward
+                : ReedsSheppDirection::Forward
+        });
+    }
+
+    const double normalized_step = sample_step_ / min_turning_radius_;
+    for (double distance = normalized_step;
+         distance < vendor_path.total_length - kEpsilon;
+         distance += normalized_step) {
+        const SegmentControl control = controlAtDistance(vendor_path, distance);
+        const ompl_rs::State sampled =
+            ompl_rs::interpolate(normalized_start, vendor_path, distance);
+        result.samples.push_back(toCarPose(
+            sampled,
+            min_turning_radius_,
+            steerFor(control.type, max_steer_),
+            control.direction));
+    }
+
+    const SegmentControl final_control =
+        controlAtDistance(vendor_path, vendor_path.total_length);
+    const ompl_rs::State final_state =
+        ompl_rs::interpolate(normalized_start, vendor_path, vendor_path.total_length);
+    CarPose final_pose = toCarPose(
+        final_state,
+        min_turning_radius_,
+        steerFor(final_control.type, max_steer_),
+        final_control.direction);
+
+    if (canSnapToGoal(final_pose, goal)) {
+        final_pose.x = goal.x;
+        final_pose.y = goal.y;
+        final_pose.theta = normalizeAngle(goal.theta);
+    }
+
+    result.samples.push_back(final_pose);
+
+    if (!reachesGoal(result.samples.back(), goal, goal_position_tolerance_,
+                    goal_theta_tolerance_)) {
+        return std::nullopt;
+    }
+
+    return result;
 }
 
 std::optional<double> ReedsSheppGenerator::estimateDistance(
@@ -1766,21 +234,20 @@ std::optional<double> ReedsSheppGenerator::estimateDistance(
 std::optional<double> ReedsSheppGenerator::estimateDistance(
     const CarPose& start,
     const CarPose& goal) const {
-    if (min_turning_radius_ <= kEpsilon) {
+    if (min_turning_radius_ <= kEpsilon || !std::isfinite(min_turning_radius_)) {
         return std::nullopt;
     }
 
-    const LocalState s = toLocal(start, goal, min_turning_radius_);
+    const ompl_rs::State normalized_start =
+        toNormalizedState(start, min_turning_radius_);
+    const ompl_rs::State normalized_goal =
+        toNormalizedState(goal, min_turning_radius_);
+    const double distance =
+        ompl_rs::distance(normalized_start, normalized_goal)
+        * min_turning_radius_;
 
-    std::optional<double> best_length;
-
-    for (int i = 0; i < WI_COUNT; ++i) {
-        WordCandidate wc = generateWord(s, static_cast<WordIndex>(i));
-        if (wc.valid && wc.total_length < kInfinity
-            && (!best_length || wc.total_length < *best_length)) {
-            best_length = wc.total_length;
-        }
+    if (!std::isfinite(distance)) {
+        return std::nullopt;
     }
-
-    return best_length;
+    return distance;
 }

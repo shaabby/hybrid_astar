@@ -24,11 +24,13 @@ file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
 
 add_executable(hybrid_astar
     ${PROJECT_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp/OmplReedsShepp.cpp"
 )
 
 target_include_directories(hybrid_astar
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp"
 )
 
 target_link_libraries(hybrid_astar

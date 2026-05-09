@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -168,15 +169,45 @@ std::optional<ReedsSheppPath> tryAnalyticExpansion(
     const ReedsSheppGenerator& generator,
     const CarPose& pose,
     const GridMap& map,
+    const HybridAstarConfig& config,
     const ReedsSheppCollisionChecker& collision_checker) {
-    const std::optional<ReedsSheppPath> candidate = generator.generate(
-        pose, map.goal());
+    const Pose2D& goal = map.goal();
+    const std::vector<double> xy_offsets = {
+        0.0,
+        config.goal_xy_tolerance,
+        -config.goal_xy_tolerance,
+        config.goal_xy_tolerance * 0.5,
+        -config.goal_xy_tolerance * 0.5
+    };
+    const std::vector<double> theta_offsets = {
+        0.0,
+        config.goal_theta_tolerance,
+        -config.goal_theta_tolerance
+    };
 
-    if (!candidate || !collision_checker.isCollisionFree(*candidate)) {
-        return std::nullopt;
+    for (double dx : xy_offsets) {
+        for (double dy : xy_offsets) {
+            if (std::hypot(dx, dy) > config.goal_xy_tolerance + 1.0e-9) {
+                continue;
+            }
+            for (double dtheta : theta_offsets) {
+                CarPose candidate_goal;
+                candidate_goal.x = goal.x + dx;
+                candidate_goal.y = goal.y + dy;
+                candidate_goal.theta = normalizeAngle(goal.theta + dtheta);
+                candidate_goal.direction = 1;
+
+                const std::optional<ReedsSheppPath> candidate =
+                    generator.generate(pose, candidate_goal);
+
+                if (candidate && collision_checker.isCollisionFree(*candidate)) {
+                    return candidate;
+                }
+            }
+        }
     }
 
-    return candidate;
+    return std::nullopt;
 }
 
 /**
@@ -364,7 +395,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 current.pose, map, config_, iterations)) {
             if (const std::optional<ReedsSheppPath> analytic_path =
                     tryAnalyticExpansion(rs_generator, current.pose, map,
-                                         rs_collision_checker)) {
+                                         config_, rs_collision_checker)) {
                 result.success = true;
                 result.path = reconstructPath(nodes, current_id);
                 result.path.insert(result.path.end(),
