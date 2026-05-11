@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Path JSON Viewer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #eef1f5;
+      color: #17202a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 18px;
+      background:
+        linear-gradient(180deg, #f8fafc 0%, #eef1f5 48%, #e9eef4 100%);
+    }
+
+    main {
+      width: min(1280px, 100%);
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: end;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0 0 5px;
+      font-size: 21px;
+      line-height: 1.2;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .meta {
+      margin: 0;
+      color: #5b6675;
+      font-size: 13px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button,
+    .file-button,
+    select,
+    input[type="range"] {
+      font: inherit;
+    }
+
+    button,
+    .file-button,
+    select {
+      min-height: 36px;
+      border: 1px solid #b9c3cf;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #17202a;
+      padding: 7px 10px;
+      font-size: 14px;
+    }
+
+    button,
+    .file-button,
+    select {
+      cursor: pointer;
+    }
+
+    button:hover,
+    .file-button:hover,
+    select:hover {
+      border-color: #6b7788;
+    }
+
+    button.primary {
+      border-color: #2563eb;
+      background: #2563eb;
+      color: #ffffff;
+    }
+
+    button:disabled,
+    select:disabled,
+    input:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .canvas-shell {
+      border: 1px solid #c7d0db;
+      background: #ffffff;
+      min-width: 0;
+      overflow: auto;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      min-width: 760px;
+      height: auto;
+      background: #ffffff;
+    }
+
+    aside {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .panel {
+      border: 1px solid #c7d0db;
+      background: #ffffff;
+      padding: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .field:last-child {
+      margin-bottom: 0;
+    }
+
+    label,
+    .label {
+      color: #4b5563;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .range-row {
+      display: grid;
+      grid-template-columns: 1fr 54px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: #2563eb;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric {
+      border: 1px solid #d6dde6;
+      padding: 8px;
+      min-width: 0;
+    }
+
+    .metric span {
+      display: block;
+      color: #5b6675;
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 15px;
+      font-weight: 740;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      color: #4b5563;
+      font-size: 13px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(0, 0, 0, 0.18);
+      flex: none;
+    }
+
+    .status {
+      min-height: 19px;
+      color: #4b5563;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .drop-hint {
+      border: 1px dashed #9aa7b7;
+      background: #f8fafc;
+      color: #4b5563;
+      padding: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .drop-active .canvas-shell,
+    .drop-active .drop-hint {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    @media (max-width: 980px) {
+      body {
+        padding: 12px;
+      }
+
+      .topbar,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        justify-content: flex-start;
+      }
+
+      canvas {
+        min-width: 640px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <div class="topbar">
+      <div>
+        <h1>Path JSON Viewer</h1>
+        <p class="meta" id="subtitle">导入 output/result.json 或 Reeds-Shepp 测试输出，查看轨迹、采样点和车辆姿态。</p>
+      </div>
+      <div class="toolbar">
+        <label class="file-button" for="fileInput">导入 JSON</label>
+        <input id="fileInput" type="file" accept=".json,application/json">
+        <select id="pathSelect" disabled></select>
+        <button id="playButton" class="primary" type="button" disabled>Play</button>
+        <button id="stepButton" type="button" disabled>Step</button>
+        <button id="fitButton" type="button" disabled>Fit</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="canvas-shell">
+        <canvas id="canvas" width="1000" height="640"></canvas>
+      </div>
+
+      <aside>
+        <section class="panel">
+          <div class="field">
+            <label for="frameRange">Frame</label>
+            <div class="range-row">
+              <input id="frameRange" type="range" min="0" max="0" value="0" disabled>
+              <span class="label" id="frameText">0 / 0</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="speedRange">Speed</label>
+            <div class="range-row">
+              <input id="speedRange" type="range" min="1" max="120" value="45">
+              <span class="label" id="speedText">45 fps</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="metric-grid">
+            <div class="metric"><span>Map</span><strong id="mapMetric">--</strong></div>
+            <div class="metric"><span>Samples</span><strong id="sampleMetric">--</strong></div>
+            <div class="metric"><span>Length</span><strong id="lengthMetric">--</strong></div>
+            <div class="metric"><span>Pose</span><strong id="poseMetric">--</strong></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="legend">
+            <span><i class="swatch" style="background:#111827"></i>Obstacle</span>
+            <span><i class="swatch" style="background:#ffffff"></i>Free</span>
+            <span><i class="swatch" style="background:#2563eb"></i>Path</span>
+            <span><i class="swatch" style="background:#f97316"></i>Vehicle</span>
+          </div>
+        </section>
+
+        <section class="drop-hint" id="dropHint">把 JSON 文件拖到页面任意位置也可以加载。</section>
+        <section class="status" id="status">等待导入 JSON。</section>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const fileInput = document.getElementById("fileInput");
+    const pathSelect = document.getElementById("pathSelect");
+    const playButton = document.getElementById("playButton");
+    const stepButton = document.getElementById("stepButton");
+    const fitButton = document.getElementById("fitButton");
+    const frameRange = document.getElementById("frameRange");
+    const speedRange = document.getElementById("speedRange");
+    const speedText = document.getElementById("speedText");
+    const frameText = document.getElementById("frameText");
+    const mapMetric = document.getElementById("mapMetric");
+    const sampleMetric = document.getElementById("sampleMetric");
+    const lengthMetric = document.getElementById("lengthMetric");
+    const poseMetric = document.getElementById("poseMetric");
+    const statusEl = document.getElementById("status");
+    const subtitle = document.getElementById("subtitle");
+    const app = document.getElementById("app");
+
+    const defaultVehicle = {
+      length: 4.5,
+      width: 2.0,
+      rearToCenter: 1.35,
+      rear_to_center: 1.35
+    };
+
+    let dataModel = null;
+    let activePathIndex = 0;
+    let activeFrame = 0;
+    let playing = false;
+    let lastFrameTime = 0;
+    let animationId = 0;
+    let viewport = {margin: 34, scale: 1, originX: 0, originY: 0};
+
+    function finiteNumber(value, fallback = 0) {
+      return Number.isFinite(Number(value)) ? Number(value) : fallback;
+    }
+
+    function normalizePose(pose) {
+      return {
+        x: finiteNumber(pose?.x),
+        y: finiteNumber(pose?.y),
+        theta: finiteNumber(pose?.theta),
+        steer: finiteNumber(pose?.steer),
+        direction: finiteNumber(pose?.direction, 1)
+      };
+    }
+
+    function normalizeVehicle(vehicle) {
+      const source = vehicle || {};
+      return {
+        length: finiteNumber(source.length, defaultVehicle.length),
+        width: finiteNumber(source.width, defaultVehicle.width),
+        rearToCenter: finiteNumber(
+          source.rearToCenter ?? source.rear_to_center,
+          defaultVehicle.rearToCenter
+        )
+      };
+    }
+
+    function normalizeMap(map, paths) {
+      const allSamples = paths.flatMap((path) => path.samples);
+      const maxX = Math.max(30, ...allSamples.map((pose) => pose.x), finiteNumber(map?.width, 0));
+      const maxY = Math.max(20, ...allSamples.map((pose) => pose.y), finiteNumber(map?.height, 0));
+      const width = Math.max(1, Math.ceil(finiteNumber(map?.width, maxX + 2)));
+      const height = Math.max(1, Math.ceil(finiteNumber(map?.height, maxY + 2)));
+      const obstacles = Array.isArray(map?.obstacles)
+        ? map.obstacles.map((obstacle) => ({
+            x: finiteNumber(obstacle.x),
+            y: finiteNumber(obstacle.y),
+            w: Math.max(1, finiteNumber(obstacle.w, 1)),
+            h: Math.max(1, finiteNumber(obstacle.h, 1))
+          }))
+        : [];
+
+      return {
+        width,
+        height,
+        obstacles,
+        start: map?.start ? normalizePose(map.start) : null,
+        goal: map?.goal ? normalizePose(map.goal) : null,
+        obstacleCount: finiteNumber(map?.obstacle_count ?? obstacles.length, obstacles.length),
+        source: map?.source || ""
+      };
+    }
+
+    function normalizePlannerJson(json) {
+      const paths = [];
+
+      if (Array.isArray(json.paths)) {
+        json.paths.forEach((path, index) => {
+          const samples = Array.isArray(path.samples)
+            ? path.samples.map(normalizePose)
+            : [];
+          paths.push({
+            name: path.name || `path ${index + 1}`,
+            word: path.word || "",
+            totalLength: finiteNumber(path.total_length ?? path.totalLength, NaN),
+            segments: Array.isArray(path.segments) ? path.segments : [],
+            samples
+          });
+        });
+      }
+
+      if (Array.isArray(json.path)) {
+        paths.push({
+          name: "planner path",
+          word: "",
+          totalLength: NaN,
+          segments: [],
+          samples: json.path.map(normalizePose)
+        });
+      }
+
+      if (paths.length === 0 && Array.isArray(json.samples)) {
+        paths.push({
+          name: json.name || "samples",
+          word: json.word || "",
+          totalLength: finiteNumber(json.total_length ?? json.totalLength, NaN),
+          segments: Array.isArray(json.segments) ? json.segments : [],
+          samples: json.samples.map(normalizePose)
+        });
+      }
+
+      const usablePaths = paths.filter((path) => path.samples.length > 0);
+      if (usablePaths.length === 0) {
+        throw new Error("JSON 中没有可显示的 path、paths[].samples 或 samples。");
+      }
+
+      return {
+        map: normalizeMap(json.map, usablePaths),
+        vehicle: normalizeVehicle(json.vehicle),
+        paths: usablePaths,
+        expanded: Array.isArray(json.expanded) ? json.expanded.map(normalizePose) : []
+      };
+    }
+
+    function loadJsonText(text, fileName) {
+      const json = JSON.parse(text);
+      dataModel = normalizePlannerJson(json);
+      activePathIndex = 0;
+      activeFrame = 0;
+      playing = false;
+      syncPathSelect();
+      updateControls();
+      fitCanvasToMap();
+      draw();
+      subtitle.textContent = fileName || "JSON loaded";
+      statusEl.textContent = `Loaded ${dataModel.paths.length} path(s).`;
+    }
+
+    function syncPathSelect() {
+      pathSelect.innerHTML = "";
+      dataModel.paths.forEach((path, index) => {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = path.word ? `${path.name} (${path.word})` : path.name;
+        pathSelect.appendChild(option);
+      });
+      pathSelect.value = String(activePathIndex);
+    }
+
+    function activePath() {
+      return dataModel?.paths[activePathIndex] || null;
+    }
+
+    function updateControls() {
+      const path = activePath();
+      const hasPath = Boolean(path);
+      pathSelect.disabled = !hasPath || dataModel.paths.length < 2;
+      playButton.disabled = !hasPath;
+      stepButton.disabled = !hasPath;
+      fitButton.disabled = !hasPath;
+      frameRange.disabled = !hasPath;
+      frameRange.max = hasPath ? String(Math.max(0, path.samples.length - 1)) : "0";
+      frameRange.value = String(activeFrame);
+      playButton.textContent = playing ? "Pause" : "Play";
+      speedText.textContent = `${speedRange.value} fps`;
+
+      const frameTotal = hasPath ? path.samples.length : 0;
+      frameText.textContent = frameTotal > 0 ? `${activeFrame + 1} / ${frameTotal}` : "0 / 0";
+      sampleMetric.textContent = hasPath ? String(path.samples.length) : "--";
+      lengthMetric.textContent = hasPath
+        ? (Number.isFinite(path.totalLength) ? path.totalLength.toFixed(3) : measurePath(path.samples).toFixed(3))
+        : "--";
+      mapMetric.textContent = dataModel ? `${dataModel.map.width} x ${dataModel.map.height}` : "--";
+
+      if (hasPath) {
+        const pose = path.samples[activeFrame];
+        poseMetric.textContent = `${pose.x.toFixed(2)}, ${pose.y.toFixed(2)}`;
+      } else {
+        poseMetric.textContent = "--";
+      }
+    }
+
+    function measurePath(samples) {
+      let length = 0;
+      for (let i = 1; i < samples.length; ++i) {
+        const dx = samples[i].x - samples[i - 1].x;
+        const dy = samples[i].y - samples[i - 1].y;
+        length += Math.hypot(dx, dy);
+      }
+      return length;
+    }
+
+    function fitCanvasToMap() {
+      if (!dataModel) {
+        return;
+      }
+      const map = dataModel.map;
+      const aspect = map.width / map.height;
+      const availableWidth = Math.max(760, document.querySelector(".canvas-shell").clientWidth);
+      canvas.width = Math.round(availableWidth);
+      canvas.height = Math.round(Math.max(520, Math.min(760, availableWidth / Math.max(0.8, aspect))));
+      const margin = viewport.margin;
+      viewport.scale = Math.min(
+        (canvas.width - margin * 2) / map.width,
+        (canvas.height - margin * 2) / map.height
+      );
+      viewport.originX = Math.round((canvas.width - map.width * viewport.scale) * 0.5);
+      viewport.originY = Math.round((canvas.height - map.height * viewport.scale) * 0.5);
+    }
+
+    function wx(x) {
+      return viewport.originX + x * viewport.scale;
+    }
+
+    function wy(y) {
+      return viewport.originY + (dataModel.map.height - y) * viewport.scale;
+    }
+
+    function drawGrid() {
+      const map = dataModel.map;
+      ctx.strokeStyle = "#e1e7ef";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x <= map.width; ++x) {
+        ctx.moveTo(wx(x), wy(0));
+        ctx.lineTo(wx(x), wy(map.height));
+      }
+      for (let y = 0; y <= map.height; ++y) {
+        ctx.moveTo(wx(0), wy(y));
+        ctx.lineTo(wx(map.width), wy(y));
+      }
+      ctx.stroke();
+    }
+
+    function drawObstacles() {
+      const map = dataModel.map;
+      ctx.fillStyle = "#111827";
+      if (map.obstacles.length > 0) {
+        for (const obstacle of map.obstacles) {
+          ctx.fillRect(
+            wx(obstacle.x),
+            wy(obstacle.y + obstacle.h),
+            obstacle.w * viewport.scale,
+            obstacle.h * viewport.scale
+          );
+        }
+        return;
+      }
+
+      if (map.obstacleCount > 0) {
+        const cell = viewport.scale;
+        ctx.fillRect(wx(0), wy(1), map.width * cell, cell);
+        ctx.fillRect(wx(0), wy(map.height), map.width * cell, cell);
+        ctx.fillRect(wx(0), wy(map.height), cell, map.height * cell);
+        ctx.fillRect(wx(map.width - 1), wy(map.height), cell, map.height * cell);
+      }
+    }
+
+    function drawPoseMarker(pose, color, label) {
+      if (!pose) {
+        return;
+      }
+      const x = wx(pose.x);
+      const y = wy(pose.y);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-pose.theta);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-8, -7);
+      ctx.lineTo(-5, 0);
+      ctx.lineTo(-8, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = color;
+      ctx.font = "700 13px system-ui, sans-serif";
+      ctx.fillText(label, x + 9, y - 9);
+    }
+
+    function drawPolyline(samples, color, width, untilIndex = samples.length - 1) {
+      if (samples.length === 0) {
+        return;
+      }
+      const last = Math.min(samples.length - 1, Math.max(0, untilIndex));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(wx(samples[0].x), wy(samples[0].y));
+      for (let i = 1; i <= last; ++i) {
+        ctx.lineTo(wx(samples[i].x), wy(samples[i].y));
+      }
+      ctx.stroke();
+    }
+
+    function drawSamples(samples) {
+      ctx.fillStyle = "#1d4ed8";
+      const radius = Math.max(1.6, Math.min(3, viewport.scale * 0.08));
+      for (let i = 0; i < samples.length; i += Math.max(1, Math.floor(samples.length / 180))) {
+        ctx.beginPath();
+        ctx.arc(wx(samples[i].x), wy(samples[i].y), radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawVehicle(pose) {
+      const vehicle = dataModel.vehicle;
+      const rear = -vehicle.rearToCenter;
+      const front = vehicle.length - vehicle.rearToCenter;
+      const halfWidth = vehicle.width * 0.5;
+      const points = [
+        [front, halfWidth],
+        [front, -halfWidth],
+        [rear, -halfWidth],
+        [rear, halfWidth]
+      ];
+
+      ctx.save();
+      ctx.translate(wx(pose.x), wy(pose.y));
+      ctx.rotate(-pose.theta);
+      ctx.scale(viewport.scale, viewport.scale);
+      ctx.fillStyle = "rgba(249, 115, 22, 0.20)";
+      ctx.strokeStyle = "#f97316";
+      ctx.lineWidth = 2 / viewport.scale;
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], -points[0][1]);
+      for (let i = 1; i < points.length; ++i) {
+        ctx.lineTo(points[i][0], -points[i][1]);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#7c2d12";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(front, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (!dataModel) {
+        ctx.fillStyle = "#667085";
+        ctx.font = "16px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Import a path JSON file", canvas.width / 2, canvas.height / 2);
+        ctx.textAlign = "start";
+        return;
+      }
+
+      drawGrid();
+      drawObstacles();
+      drawPoseMarker(dataModel.map.start, "#16a34a", "S");
+      drawPoseMarker(dataModel.map.goal, "#dc2626", "G");
+
+      if (dataModel.expanded.length > 0) {
+        drawPolyline(dataModel.expanded, "rgba(100, 116, 139, 0.22)", 1.5);
+      }
+
+      const path = activePath();
+      drawPolyline(path.samples, "rgba(37, 99, 235, 0.22)", 3);
+      drawPolyline(path.samples, "#2563eb", 4, activeFrame);
+      drawSamples(path.samples);
+      drawVehicle(path.samples[activeFrame]);
+      updateControls();
+    }
+
+    function setFrame(value) {
+      const path = activePath();
+      if (!path) {
+        return;
+      }
+      activeFrame = Math.max(0, Math.min(path.samples.length - 1, value));
+      draw();
+    }
+
+    function animate(timestamp) {
+      if (!playing) {
+        return;
+      }
+      const fps = finiteNumber(speedRange.value, 45);
+      const interval = 1000 / Math.max(1, fps);
+      if (timestamp - lastFrameTime >= interval) {
+        const path = activePath();
+        if (path && activeFrame < path.samples.length - 1) {
+          activeFrame += 1;
+        } else {
+          playing = false;
+        }
+        lastFrameTime = timestamp;
+        draw();
+      }
+      animationId = requestAnimationFrame(animate);
+    }
+
+    function startAnimation() {
+      if (!activePath()) {
+        return;
+      }
+      playing = !playing;
+      if (playing) {
+        if (activeFrame >= activePath().samples.length - 1) {
+          activeFrame = 0;
+        }
+        lastFrameTime = 0;
+        cancelAnimationFrame(animationId);
+        animationId = requestAnimationFrame(animate);
+      }
+      draw();
+    }
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file) {
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          loadJsonText(String(reader.result), file.name);
+        } catch (error) {
+          statusEl.textContent = `Load failed: ${error.message}`;
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    pathSelect.addEventListener("change", () => {
+      activePathIndex = finiteNumber(pathSelect.value, 0);
+      activeFrame = 0;
+      playing = false;
+      draw();
+    });
+
+    playButton.addEventListener("click", startAnimation);
+    stepButton.addEventListener("click", () => setFrame(activeFrame + 1));
+    fitButton.addEventListener("click", () => {
+      fitCanvasToMap();
+      draw();
+    });
+    frameRange.addEventListener("input", () => {
+      playing = false;
+      setFrame(finiteNumber(frameRange.value, 0));
+    });
+    speedRange.addEventListener("input", updateControls);
+
+    window.addEventListener("resize", () => {
+      fitCanvasToMap();
+      draw();
+    });
+
+    document.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      app.classList.add("drop-active");
+    });
+
+    document.addEventListener("dragleave", () => {
+      app.classList.remove("drop-active");
+    });
+
+    document.addEventListener("drop", (event) => {
+      event.preventDefault();
+      app.classList.remove("drop-active");
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) {
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          loadJsonText(String(reader.result), file.name);
+        } catch (error) {
+          statusEl.textContent = `Load failed: ${error.message}`;
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    draw();
+  </script>
+</body>
+</html>

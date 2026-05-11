@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(CTest)
+
 set(FLTK_BUILD_TEST OFF CACHE BOOL "" FORCE)
 set(FLTK_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(FLTK_BUILD_FLUID OFF CACHE BOOL "" FORCE)
@@ -38,8 +40,57 @@ target_link_libraries(hybrid_astar
     fltk::fltk
 )
 
+add_executable(reeds_shepp_empty_map_test
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/reeds_shepp_empty_map_test.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Car.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CollisionChecker.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/GridMap.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ReedsShepp.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp/OmplReedsShepp.cpp"
+)
+
+target_include_directories(reeds_shepp_empty_map_test
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp"
+)
+
+target_compile_definitions(reeds_shepp_empty_map_test
+    PRIVATE
+    HYBRID_ASTAR_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_test(NAME reeds_shepp_empty_map_test
+         COMMAND reeds_shepp_empty_map_test)
+
+add_executable(path_json_viewer
+    "${CMAKE_CURRENT_SOURCE_DIR}/tool/path_json_viewer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/FltkCanvas.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/FltkViewer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/GridMap.cpp"
+)
+
+target_include_directories(path_json_viewer
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+target_compile_definitions(path_json_viewer
+    PRIVATE
+    HYBRID_ASTAR_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+target_link_libraries(path_json_viewer
+    PRIVATE
+    fltk::fltk
+)
+
 if(MSVC)
     target_compile_options(hybrid_astar PRIVATE /W4)
+    target_compile_options(reeds_shepp_empty_map_test PRIVATE /W4)
+    target_compile_options(path_json_viewer PRIVATE /W4)
 else()
     target_compile_options(hybrid_astar PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(reeds_shepp_empty_map_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(path_json_viewer PRIVATE -Wall -Wextra -Wpedantic)
 endif()

@@ -8,3 +8,4 @@ src/main
 output/demo.html
 output/result.json
 output/experiments.csv
+output/reeds_shepp_empty_map_test.json

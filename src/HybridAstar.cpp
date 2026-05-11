@@ -387,10 +387,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
 
         // Reeds-Shepp analytic expansion: 在接近目标时尝试直接连接终点。
         //
-        // 当前生成器仍是最小实现（Dubins + reverse-Dubins 候选），后续优化点：
-        // 1. 补齐完整 Reeds-Shepp cusp words；
-        // 2. 加入倒车、换挡、转向变化等代价后再选择候选；
-        // 3. 按距离、启发式收益或失败历史自适应触发。
+
         if (shouldTryAnalyticExpansion(
                 current.pose, map, config_, iterations)) {
             if (const std::optional<ReedsSheppPath> analytic_path =
