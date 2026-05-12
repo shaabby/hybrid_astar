@@ -115,8 +115,8 @@ map/grid_demo.html
   "version": 1,
   "width": 60,
   "height": 36,
-  "start": {"x": 6.5, "y": 6.5, "theta": 0.0},
-  "goal": {"x": 52.5, "y": 28.5, "theta": 0.0},
+  "start": {"x": 6, "y": 6, "theta": 0.0},
+  "goal": {"x": 52, "y": 28, "theta": 0.0},
   "obstacles": [
     {"x": 12, "y": 12}
   ]

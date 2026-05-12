@@ -10,6 +10,10 @@
 #include <utility>
 #include <vector>
 
+#define debug(...) do { \
+    fprintf(stderr, __VA_ARGS__); \
+} while (0)
+
 namespace {
 
 constexpr double kInfinity = std::numeric_limits<double>::infinity();
@@ -191,6 +195,10 @@ void CombinedHeuristic::prepare(const GridMap& map,
 double CombinedHeuristic::estimate(const CarPose& pose) const {
     const double non_obs = nonObstacleEstimate(pose);
     const double obs = obstacle_enabled_ ? obstacleEstimate(pose) : 0.0;
+
+    // debug("pose: (%.2f, %.2f, %.2f), non_obs: %.2f, obs: %.2f\n",
+    //       pose.x, pose.y, pose.theta, non_obs, obs);
+    // return non_obs;
     return std::max(non_obs, obs);
 }
 
@@ -209,18 +217,36 @@ double CombinedHeuristic::obstacleEstimate(const CarPose& pose) const {
         return euclidean(pose);
     }
 
-    const int x = static_cast<int>(std::floor(pose.x));
-    const int y = static_cast<int>(std::floor(pose.y));
-    if (!inBounds(x, y, width_, height_)) {
+    const int x0 = static_cast<int>(std::floor(pose.x));
+    const int y0 = static_cast<int>(std::floor(pose.y));
+    const int x1 = x0 + 1;
+    const int y1 = y0 + 1;
+    if (!inBounds(x0, y0, width_, height_)
+        || !inBounds(x1, y0, width_, height_)
+        || !inBounds(x0, y1, width_, height_)
+        || !inBounds(x1, y1, width_, height_)) {
         return euclidean(pose);
     }
 
-    const double distance = obstacle_distance_[static_cast<std::size_t>(
-        indexOf(x, y, width_))];
-    if (!std::isfinite(distance)) {
+    const double d00 = obstacle_distance_[static_cast<std::size_t>(
+        indexOf(x0, y0, width_))];
+    const double d10 = obstacle_distance_[static_cast<std::size_t>(
+        indexOf(x1, y0, width_))];
+    const double d01 = obstacle_distance_[static_cast<std::size_t>(
+        indexOf(x0, y1, width_))];
+    const double d11 = obstacle_distance_[static_cast<std::size_t>(
+        indexOf(x1, y1, width_))];
+    if (!std::isfinite(d00) || !std::isfinite(d10)
+        || !std::isfinite(d01) || !std::isfinite(d11)) {
         return euclidean(pose);
     }
-    return distance;
+
+    const double tx = pose.x - static_cast<double>(x0);
+    const double ty = pose.y - static_cast<double>(y0);
+    return (1.0 - tx) * (1.0 - ty) * d00
+        + tx * (1.0 - ty) * d10
+        + (1.0 - tx) * ty * d01
+        + tx * ty * d11;
 }
 
 double CombinedHeuristic::nonObstacleEstimate(const CarPose& pose) const {

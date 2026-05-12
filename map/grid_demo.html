@@ -179,7 +179,7 @@
     <div class="topbar">
       <div>
         <h1>Hybrid A* Grid Map Editor</h1>
-        <p class="meta">点击方格编辑障碍物，或放置起点/终点。导出的 JSON 可作为 C++ 规划输入。</p>
+        <p class="meta">点击方格编辑障碍物，或在网格交叉点放置起点/终点。导出的 JSON 可作为 C++ 规划输入。</p>
       </div>
       <div class="tools">
         <button id="obstacleTool" class="active" type="button">障碍物</button>
@@ -229,8 +229,8 @@
       version: 1,
       width: 60,
       height: 36,
-      start: { x: 6.5, y: 6.5, theta: 0 },
-      goal: { x: 52.5, y: 28.5, theta: 0 },
+      start: { x: 6, y: 6, theta: 0 },
+      goal: { x: 52, y: 28, theta: 0 },
       obstacles: [
         { x: 0, y: 0, w: 60, h: 1 },
         { x: 0, y: 35, w: 60, h: 1 },
@@ -282,8 +282,8 @@
         version: raw.version ?? 1,
         width: Number(raw.width ?? 60),
         height: Number(raw.height ?? 36),
-        start: raw.start ?? { x: 6.5, y: 6.5, theta: 0 },
-        goal: raw.goal ?? { x: 52.5, y: 28.5, theta: 0 },
+        start: raw.start ?? { x: 6, y: 6, theta: 0 },
+        goal: raw.goal ?? { x: 52, y: 28, theta: 0 },
         obstacleSet: new Set()
       };
 
@@ -334,6 +334,10 @@
       return x >= 0 && y >= 0 && x < data.width && y < data.height;
     }
 
+    function isGridPointInside(data, x, y) {
+      return x >= 0 && y >= 0 && x <= data.width && y <= data.height;
+    }
+
     function updateGeometry() {
       cell = Math.min(
         (canvas.width - margin * 2) / mapData.width,
@@ -351,15 +355,33 @@
       return originY - y * cell;
     }
 
-    function cellFromEvent(event) {
+    function gridPositionFromEvent(event) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       const px = (event.clientX - rect.left) * scaleX;
       const py = (event.clientY - rect.top) * scaleY;
-      const x = Math.floor((px - originX) / cell);
-      const y = Math.floor((originY - py) / cell);
+      return {
+        x: (px - originX) / cell,
+        y: (originY - py) / cell
+      };
+    }
+
+    function cellFromEvent(event) {
+      const gridPos = gridPositionFromEvent(event);
+      const x = Math.floor(gridPos.x);
+      const y = Math.floor(gridPos.y);
       if (!isInside(mapData, x, y)) {
+        return null;
+      }
+      return { x, y };
+    }
+
+    function gridPointFromEvent(event) {
+      const gridPos = gridPositionFromEvent(event);
+      const x = Math.round(gridPos.x);
+      const y = Math.round(gridPos.y);
+      if (!isGridPointInside(mapData, x, y)) {
         return null;
       }
       return { x, y };
@@ -404,20 +426,28 @@
         }
       } else if (tool === "erase") {
         mapData.obstacleSet.delete(key);
-      } else if (tool === "start") {
+      }
+
+      draw();
+    }
+
+    function applyGridPoint(pointPos) {
+      if (!pointPos) {
+        return;
+      }
+
+      if (tool === "start") {
         mapData.start = {
-          x: cellPos.x + 0.5,
-          y: cellPos.y + 0.5,
+          x: pointPos.x,
+          y: pointPos.y,
           theta: degToRad(startThetaInput.value)
         };
-        mapData.obstacleSet.delete(key);
       } else if (tool === "goal") {
         mapData.goal = {
-          x: cellPos.x + 0.5,
-          y: cellPos.y + 0.5,
+          x: pointPos.x,
+          y: pointPos.y,
           theta: degToRad(goalThetaInput.value)
         };
-        mapData.obstacleSet.delete(key);
       }
 
       draw();
@@ -569,7 +599,11 @@
 
     canvas.addEventListener("mousedown", (event) => {
       dragging = true;
-      applyCell(cellFromEvent(event), false);
+      if (tool === "start" || tool === "goal") {
+        applyGridPoint(gridPointFromEvent(event));
+      } else {
+        applyCell(cellFromEvent(event), false);
+      }
     });
 
     canvas.addEventListener("mousemove", (event) => {

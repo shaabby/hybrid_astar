@@ -12,7 +12,7 @@ It supports:
 
 - importing a JSON map file;
 - clicking cells to place or remove obstacles;
-- placing start and goal poses;
+- placing start and goal poses on grid intersections;
 - editing start and goal heading angles;
 - exporting a JSON map file for the C++ planner.
 
@@ -26,8 +26,8 @@ from the editor use single-cell obstacles:
   "version": 1,
   "width": 60,
   "height": 36,
-  "start": {"x": 6.5, "y": 6.5, "theta": 0},
-  "goal": {"x": 52.5, "y": 28.5, "theta": 0},
+  "start": {"x": 6, "y": 6, "theta": 0},
+  "goal": {"x": 52, "y": 28, "theta": 0},
   "obstacles": [
     {"x": 0, "y": 0},
     {"x": 1, "y": 0}
