@@ -212,28 +212,14 @@ std::optional<ReedsSheppPath> tryAnalyticExpansion(
 }
 
 /**
- * @brief 计算子节点的 g、h、f 代价并写入 Node。
- *
- * g 包含实际轨迹段长度、倒车惩罚、转向惩罚、换挡惩罚和转向变化惩罚。
- * h 由注入的启发函数计算。
- *
- * @param[in,out] node      待更新的子节点
- * @param[in]     parent    父节点
- * @param[in]     direction 行驶方向
- * @param[in]     steer     前轮转向角
- * @param[in]     segment_length 实际运动轨迹段长度
- * @param[in]     max_steer 最大前轮转向角
- * @param[in]     config    规划器配置
- * @param[in]     heuristic 启发函数
+ * @brief 计算子节点的累计 g 代价。
  */
-void computeCost(Node& node,
-                 const Node& parent,
-                 int direction,
-                 double steer,
-                 double segment_length,
-                 double max_steer,
-                 const HybridAstarConfig& config,
-                 const Heuristic& heuristic) {
+double computeTraversalCost(const Node& parent,
+                            int direction,
+                            double steer,
+                            double segment_length,
+                            double max_steer,
+                            const HybridAstarConfig& config) {
     const double reverse_factor = direction < 0 ? config.reverse_penalty : 1.0;
     const double safe_max_steer = std::max(1.0e-9, std::abs(max_steer));
     const double steer_ratio = std::abs(steer) / safe_max_steer;
@@ -245,11 +231,14 @@ void computeCost(Node& node,
     const double steer_change_cost =
         config.steer_change_penalty * steer_change_ratio;
 
-    node.g = parent.g
+    return parent.g
         + segment_length * reverse_factor
         + segment_length * config.steer_penalty * steer_ratio
         + gear_switch_cost
         + steer_change_cost;
+}
+
+void computeHeuristicCost(Node& node, const Heuristic& heuristic) {
     node.h = heuristic.estimate(node.pose);
     node.f = node.g + node.h;
 }
@@ -503,7 +492,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                     continue; // 碰撞或没有移动，放弃该分支
                 }
 
-                // 5.2 构造子节点。h/f 在 computeCost 中统一计算，避免热循环内重复评估启发式。
+                // 5.2 构造子节点。先只计算 g，去重后再评估昂贵的启发式 h。
                 Node next;
                 next.pose = pose;
                 next.x_index = static_cast<int>(
@@ -514,11 +503,12 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 next.parent = current_id;
                 next.segment = std::move(segment);
 
-                // 5.3 计算代价（含倒车、转向、换挡和转向变化惩罚）
+                // 5.3 计算累计 g 代价（含倒车、转向、换挡和转向变化惩罚）
                 const double segment_length = config_.step_size
                     * static_cast<double>(next.segment.size());
-                computeCost(next, current, direction, steer, segment_length,
-                            car.maxSteer(), config_, heuristic);
+                next.g = computeTraversalCost(current, direction, steer,
+                                              segment_length, car.maxSteer(),
+                                              config_);
 
                 // 5.4 去重：检查 closed set 和 best_g
                 const std::int64_t next_key = makeKey(
@@ -533,6 +523,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 }
 
                 // 5.5 加入 open set
+                computeHeuristicCost(next, heuristic);
                 const int next_id = static_cast<int>(nodes.size());
                 best_g[next_key] = next.g;
                 nodes.push_back(std::move(next));

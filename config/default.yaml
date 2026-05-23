@@ -24,7 +24,7 @@ hybrid_astar:
   max_iterations: 120000                # 搜索循环最大迭代次数，超过后判定规划失败。
   allow_reverse: true                   # 是否允许规划器生成倒车运动。
   enable_analytic_expansion: true       # 是否启用 Reeds-Shepp 曲线直连目标。
-  analytic_expansion_distance: 30.0     # 距离目标多近时允许尝试解析直连。
+  analytic_expansion_distance: 8        # 距离目标多近时允许尝试解析直连。
   analytic_expansion_interval: 25       # 搜索中每隔多少次扩展尝试一次解析直连。
   collision_safety_margin: 0.0          # 碰撞检测时对车辆外轮廓额外外扩的安全距离。
   enable_obstacle_heuristic: true       # 是否启用考虑障碍物的启发式代价。
