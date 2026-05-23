@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -296,8 +297,15 @@ HybridAstar::HybridAstar(HybridAstarConfig config,
 
 PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     PlanResult result;
+    if (config_.debug) {
+        std::cerr << "[debug] planner: prepare heuristic "
+                  << heuristicName() << '\n';
+    }
     heuristic_->prepare(map, car, config_);
     const Heuristic& heuristic = *heuristic_;
+    if (config_.debug) {
+        std::cerr << "[debug] planner: initialize collision checkers\n";
+    }
     VehicleCollisionConfig collision_config;
     collision_config.safety_margin = config_.collision_safety_margin;
     const VehicleCollisionChecker collision_checker(map, car, collision_config);
@@ -325,6 +333,9 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     };
 
     if (collision_checker.collides(start)) {
+        if (config_.debug) {
+            std::cerr << "[debug] planner: start pose is in collision\n";
+        }
         return result; // 起点在障碍物内，直接返回失败
     }
 
@@ -345,6 +356,11 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     std::unordered_map<std::int64_t, double> best_g;
     std::unordered_set<std::int64_t> closed;
     best_g[makeKey(start_node.x_index, start_node.y_index, start_node.theta_index)] = 0.0;
+    if (config_.debug) {
+        std::cerr << "[debug] planner: start node ready"
+                  << " h=" << start_node.h
+                  << " open=" << open.size() << '\n';
+    }
 
     // ------------------------------------------------------------------
     // 3. 预计算运动基元控制量
@@ -355,6 +371,14 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     const std::vector<double> steers = {-car.maxSteer(), 0.0, car.maxSteer()};
     const int substeps = std::max(1, static_cast<int>(std::round(
         config_.primitive_length / config_.step_size)));
+    if (config_.debug) {
+        std::cerr << "[debug] planner: motion primitives ready"
+                  << " directions=" << directions.size()
+                  << " steers=" << steers.size()
+                  << " substeps=" << substeps << '\n';
+        std::cerr << "[debug] planner: search loop start"
+                  << " max_iterations=" << config_.max_iterations << '\n';
+    }
 
     // ------------------------------------------------------------------
     // 4. 主搜索循环（A*）
@@ -362,6 +386,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     int iterations = 0;
     while (!open.empty() && iterations < config_.max_iterations) {
         ++iterations;
+        result.iterations = iterations;
 
         const OpenEntry current_entry = open.top();
         open.pop();
@@ -377,11 +402,35 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
         }
         closed.insert(current_key);
         result.expanded.push_back(current.pose);
+        const int progress_interval =
+            std::max(1, config_.debug_progress_interval);
+        if (config_.debug && iterations % progress_interval == 0) {
+            const Pose2D& goal = map.goal();
+            std::cerr << "[debug] planner: iteration=" << iterations
+                      << " open=" << open.size()
+                      << " closed=" << closed.size()
+                      << " nodes=" << nodes.size()
+                      << " current=(" << current.pose.x << ", "
+                      << current.pose.y << ", " << current.pose.theta << ")"
+                      << " distance_to_goal="
+                      << distance2d(current.pose.x, current.pose.y,
+                                    goal.x, goal.y)
+                      << '\n';
+        }
 
         // 到达目标，重建路径并返回
         if (isGoal(current.pose, map, config_)) {
             result.success = true;
             result.path = reconstructPath(nodes, current_id);
+            result.generated_nodes = nodes.size();
+            result.open_remaining = open.size();
+            if (config_.debug) {
+                std::cerr << "[debug] planner: goal reached by search"
+                          << " iterations=" << result.iterations
+                          << " path_poses=" << result.path.size()
+                          << " expanded=" << result.expanded.size()
+                          << '\n';
+            }
             return result;
         }
 
@@ -398,6 +447,15 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 result.path.insert(result.path.end(),
                                    analytic_path->samples.begin(),
                                    analytic_path->samples.end());
+                result.generated_nodes = nodes.size();
+                result.open_remaining = open.size();
+                if (config_.debug) {
+                    std::cerr << "[debug] planner: analytic expansion succeeded"
+                              << " iterations=" << result.iterations
+                              << " path_poses=" << result.path.size()
+                              << " expanded=" << result.expanded.size()
+                              << '\n';
+                }
                 return result;
             }
         }
@@ -428,6 +486,15 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                         result.path = reconstructPath(nodes, current_id);
                         result.path.insert(result.path.end(),
                                            segment.begin(), segment.end());
+                        result.generated_nodes = nodes.size();
+                        result.open_remaining = open.size();
+                        if (config_.debug) {
+                            std::cerr << "[debug] planner: goal reached during primitive"
+                                      << " iterations=" << result.iterations
+                                      << " path_poses=" << result.path.size()
+                                      << " expanded=" << result.expanded.size()
+                                      << '\n';
+                        }
                         return result;
                     }
                 }
@@ -469,6 +536,16 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     }
 
     // 达到最大迭代次数仍未找到路径，返回失败
+    result.generated_nodes = nodes.size();
+    result.open_remaining = open.size();
+    if (config_.debug) {
+        std::cerr << "[debug] planner: search failed"
+                  << " iterations=" << result.iterations
+                  << " expanded=" << result.expanded.size()
+                  << " nodes=" << result.generated_nodes
+                  << " open=" << result.open_remaining
+                  << '\n';
+    }
     return result;
 }
 

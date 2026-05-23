@@ -74,6 +74,7 @@ private:
     double reeds_shepp_sample_step_ = 0.2;
     double max_steer_ = 0.0;
     bool obstacle_enabled_ = false;
+    bool debug_enabled_ = false;
     ObstacleSet obstacle_cells_;
     std::vector<Point2D> visibility_points_;
     std::vector<std::vector<std::pair<int, double>>> visibility_graph_;

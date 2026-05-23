@@ -8,7 +8,6 @@
 
 #include "LineOfSight.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -105,37 +104,6 @@ void appendCellsForPoint(std::vector<HashCell>& cells, Point2D point, double eps
     }
 }
 
-/**
- * @brief Liang-Barsky风格的线条裁剪（下界）
- * @param p 裁剪边界的方向分量
- * @param q 边界端点的偏移量
- * @param t0 当前下界参数（会被原地修改）
- * @param t1 当前上界参数（会被原地修改）
- * @param eps 比较用的epsilon容差
- * @return 如果线段与边界相交返回true，被拒绝则返回false
- *
- * 实现Liang-Barsky线条裁剪算法的一边。
- * 更新t0和t1以反映新的裁剪区间。
- */
-bool clipLower(double p, double q, double& t0, double& t1, double eps) {
-    if (std::abs(p) <= eps) {
-        return q >= 0.0;
-    }
-
-    const double r = q / p;
-    if (p < 0.0) {
-        if (r > t1) {
-            return false;
-        }
-        t0 = std::max(t0, r);
-    } else {
-        if (r < t0) {
-            return false;
-        }
-        t1 = std::min(t1, r);
-    }
-    return true;
-}
 
 } // namespace
 
@@ -233,50 +201,6 @@ std::vector<HashCell> supercoverDdaCells(Point2D a, Point2D b, double eps) {
     return cells;
 }
 
-/**
- * @brief 检查线段是否进入指定单元格的内部
- * @param a 线段的起点
- * @param b 线段的终点
- * @param cell 要测试的单元格
- * @param eps 比较用的epsilon容差（默认：1.0e-9）
- * @return 如果线段进入单元格内部返回true，否则返回false
- *
- * 使用Liang-Barsky算法将线段裁剪到单元格内部边界
- * （向内收缩eps以避免边界情况）。如果裁剪后的
- * 参数区间[t0, t1]有正长度，则线段进入内部。
- */
-bool segmentEntersCellInterior(Point2D a,
-                               Point2D b,
-                               HashCell cell,
-                               double eps) {
-    const double xmin = static_cast<double>(cell.x) + eps;
-    const double xmax = static_cast<double>(cell.x + 1) - eps;
-    const double ymin = static_cast<double>(cell.y) + eps;
-    const double ymax = static_cast<double>(cell.y + 1) - eps;
-    if (xmin >= xmax || ymin >= ymax) {
-        return false;
-    }
-
-    const double dx = b.x - a.x;
-    const double dy = b.y - a.y;
-    double t0 = 0.0;
-    double t1 = 1.0;
-
-    if (!clipLower(-dx, a.x - xmin, t0, t1, eps)) {
-        return false;
-    }
-    if (!clipLower(dx, xmax - a.x, t0, t1, eps)) {
-        return false;
-    }
-    if (!clipLower(-dy, a.y - ymin, t0, t1, eps)) {
-        return false;
-    }
-    if (!clipLower(dy, ymax - a.y, t0, t1, eps)) {
-        return false;
-    }
-
-    return t0 <= t1 + eps;
-}
 
 /**
  * @brief 判断两点之间是否存在畅通的视域
@@ -286,19 +210,15 @@ bool segmentEntersCellInterior(Point2D a,
  * @param eps 比较用的epsilon容差（默认：1.0e-9）
  * @return 如果视域畅通返回true，被阻挡则返回false
  *
- * 首先计算线段的超级覆盖（它接触的所有单元格），
- * 然后检查每个障碍物单元格，判断线段是否真正进入该单元格内部。
- * 单元格是障碍物并不足以阻挡视线，如果线段只经过其边界或角落。
+ * 计算线段的超级覆盖（它接触的所有单元格），
+ * 只要路径接触到障碍物单元格就认为被阻挡。
  */
 bool hasLineOfSight(Point2D a,
                     Point2D b,
                     const ObstacleSet& obstacles,
                     double eps) {
     for (const HashCell& cell : supercoverDdaCells(a, b, eps)) {
-        if (!obstacles.contains(cell)) {
-            continue;
-        }
-        if (segmentEntersCellInterior(a, b, cell, eps)) {
+        if (obstacles.contains(cell)) {
             return false;
         }
     }

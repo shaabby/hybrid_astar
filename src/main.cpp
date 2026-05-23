@@ -37,6 +37,10 @@ void printUsage(const char* executable) {
         << "       " << executable << " --help\n";
 }
 
+void debugStage(const std::string& message) {
+    std::cerr << "[debug] " << message << '\n';
+}
+
 AppOptions parseOptions(int argc, char* argv[]) {
     AppOptions options;
     bool saw_map_path = false;
@@ -68,16 +72,22 @@ AppOptions parseOptions(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     try {
+        debugStage("parse command line options");
         const AppOptions options = parseOptions(argc, argv);
+        debugStage("load map: " + options.map_path);
         const GridMap map = MapLoader::loadJson(options.map_path);
+        debugStage("construct vehicle model and planner");
         const Car car;
         const HybridAstarConfig config;
         const HybridAstar planner(config);
+        debugStage("run Hybrid A* planning");
         const auto plan_start = std::chrono::steady_clock::now();
         const PlanResult plan = planner.plan(map, car);
         const auto plan_end = std::chrono::steady_clock::now();
 
+        debugStage("create output directory");
         std::filesystem::create_directories("output");
+        debugStage("append experiment log");
         ExperimentLogEntry log_entry;
         log_entry.map_path = options.map_path;
         log_entry.success = plan.success;
@@ -90,11 +100,18 @@ int main(int argc, char* argv[]) {
             "output/experiments.csv", log_entry, map, config);
 
         if (!plan.success) {
-            throw std::runtime_error("Hybrid A* failed to find a path");
+            throw std::runtime_error(
+                "Hybrid A* failed to find a path; iterations="
+                + std::to_string(plan.iterations)
+                + ", expanded=" + std::to_string(plan.expanded.size())
+                + ", generated_nodes=" + std::to_string(plan.generated_nodes)
+                + ", open_remaining=" + std::to_string(plan.open_remaining));
         }
 
+        debugStage("export path json");
         const std::string json = JsonExporter::exportPath(
             map, car, plan.path, plan.expanded);
+        debugStage("write output files");
         writeTextFile("output/result.json", json);
         writeTextFile("output/demo.html", HtmlWriter::wrap(json));
 
@@ -112,12 +129,15 @@ int main(int argc, char* argv[]) {
         std::cout << "Generated Hybrid A* path\n";
         std::cout << "  poses: " << plan.path.size() << '\n';
         std::cout << "  expanded: " << plan.expanded.size() << '\n';
+        std::cout << "  iterations: " << plan.iterations << '\n';
+        std::cout << "  generated_nodes: " << plan.generated_nodes << '\n';
         std::cout << "  runtime_ms: " << log_entry.runtime_ms << '\n';
         std::cout << "  output/result.json\n";
         std::cout << "  output/demo.html\n";
         std::cout << "  output/experiments.csv\n";
 
         if (options.show_viewer) {
+            debugStage("open FLTK viewer");
             VisualizationData visualization{
                 .map = map,
                 .vehicle = car.config(),
@@ -128,6 +148,7 @@ int main(int argc, char* argv[]) {
             return viewer.run();
         }
 
+        debugStage("finished without viewer");
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';

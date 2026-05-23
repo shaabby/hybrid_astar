@@ -28,11 +28,6 @@ using ObstacleSet = std::unordered_set<HashCell, HashCellHasher>;
                                                        Point2D b,
                                                        double eps = 1.0e-9);
 
-[[nodiscard]] bool segmentEntersCellInterior(Point2D a,
-                                             Point2D b,
-                                             HashCell cell,
-                                             double eps = 1.0e-9);
-
 [[nodiscard]] bool hasLineOfSight(Point2D a,
                                   Point2D b,
                                   const ObstacleSet& obstacles,

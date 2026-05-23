@@ -13,6 +13,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <iostream>
 #include <limits>
 #include <queue>
 #include <utility>
@@ -26,6 +29,25 @@ namespace {
 
 /// @brief 无穷大常量
 constexpr double kInfinity = std::numeric_limits<double>::infinity();
+
+struct HeuristicDiffLogStats {
+    std::uint64_t positive = 0;
+    std::uint64_t negative = 0;
+    std::uint64_t zero = 0;
+
+    ~HeuristicDiffLogStats() {
+        debug("[heuristic] diff_summary positive=%llu negative=%llu zero=%llu total=%llu\n",
+              static_cast<unsigned long long>(positive),
+              static_cast<unsigned long long>(negative),
+              static_cast<unsigned long long>(zero),
+              static_cast<unsigned long long>(positive + negative + zero));
+    }
+};
+
+HeuristicDiffLogStats& heuristicDiffLogStats() {
+    static HeuristicDiffLogStats stats;
+    return stats;
+}
 
 /**
  * @brief 计算二维欧几里得距离
@@ -156,6 +178,9 @@ std::string EuclideanHeuristic::name() const {
 void CombinedHeuristic::prepare(const GridMap& map,
                                 const Car& car,
                                 const HybridAstarConfig& config) {
+    if (config.debug) {
+        std::cerr << "[debug] heuristic: prepare combined heuristic\n";
+    }
     goal_ = map.goal();
     width_ = map.width();
     height_ = map.height();
@@ -164,6 +189,7 @@ void CombinedHeuristic::prepare(const GridMap& map,
     reeds_shepp_sample_step_ = config.step_size;
     max_steer_ = car.maxSteer();
     obstacle_enabled_ = config.enable_obstacle_heuristic;
+    debug_enabled_ = config.debug;
 
     // 重置可视点图数据
     obstacle_cells_.clear();
@@ -173,6 +199,9 @@ void CombinedHeuristic::prepare(const GridMap& map,
     visibility_goal_index_ = -1;
 
     if (obstacle_enabled_) {
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: collect obstacle cells\n";
+        }
         // 收集所有障碍物单元格
         for (int y = 0; y < height_; ++y) {
             for (int x = 0; x < width_; ++x) {
@@ -180,6 +209,11 @@ void CombinedHeuristic::prepare(const GridMap& map,
                     obstacle_cells_.insert({x, y});
                 }
             }
+        }
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: obstacle cells="
+                      << obstacle_cells_.size() << '\n';
+            std::cerr << "[debug] heuristic: extract visibility points\n";
         }
 
         // 提取可视点：只有1个角点接触障碍物的网格角点
@@ -193,6 +227,10 @@ void CombinedHeuristic::prepare(const GridMap& map,
                 }
             }
         }
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: visibility points="
+                      << visibility_points_.size() << '\n';
+        }
 
         // 将目标点添加到可视点列表末尾
         visibility_goal_index_ = static_cast<int>(visibility_points_.size());
@@ -200,7 +238,17 @@ void CombinedHeuristic::prepare(const GridMap& map,
 
         // 构建可视点之间的边
         visibility_graph_.assign(visibility_points_.size(), {});
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: build visibility graph"
+                      << " candidates=" << visibility_points_.size() << '\n';
+        }
+        std::size_t visibility_edge_count = 0;
         for (std::size_t i = 0; i < visibility_points_.size(); ++i) {
+            if (config.debug) {
+                std::cerr << "[debug] heuristic: visibility graph progress "
+                          << (i + 1) << "/" << visibility_points_.size()
+                          << '\n';
+            }
             for (std::size_t j = i + 1; j < visibility_points_.size(); ++j) {
                 const Point2D from = visibility_points_[i];
                 const Point2D to = visibility_points_[j];
@@ -218,12 +266,25 @@ void CombinedHeuristic::prepare(const GridMap& map,
                     static_cast<int>(i),
                     edge_cost
                 });
+                ++visibility_edge_count;
             }
+        }
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: visibility graph edges="
+                      << visibility_edge_count << '\n';
         }
 
         // 运行Dijkstra计算从目标点到所有可视点的最短距离
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: run visibility graph Dijkstra\n";
+        }
         visibility_distance_to_goal_ =
             runGraphDijkstra(visibility_graph_, visibility_goal_index_);
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: Dijkstra complete\n";
+        }
+    } else if (config.debug) {
+        std::cerr << "[debug] heuristic: obstacle heuristic disabled\n";
     }
 }
 
@@ -235,6 +296,15 @@ void CombinedHeuristic::prepare(const GridMap& map,
 double CombinedHeuristic::estimate(const CarPose& pose) const {
     const double non_obs = nonObstacleEstimate(pose);
     const double obs = obstacle_enabled_ ? obstacleEstimate(pose) : 0.0;
+    const double diff = non_obs - obs;
+    HeuristicDiffLogStats& stats = heuristicDiffLogStats();
+    if (diff > 0.0) {
+        ++stats.positive;
+    } else if (diff < 0.0) {
+        ++stats.negative;
+    } else {
+        ++stats.zero;
+    }
     return std::max(non_obs, obs);
 }
 
