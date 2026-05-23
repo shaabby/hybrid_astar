@@ -1,3 +1,11 @@
+/**
+ * @file FltkCanvas.hpp
+ * @brief FLTK绘图画布组件定义
+ *
+ * 基于FLTK的widget实现，负责在窗口中渲染栅格地图、
+ * 障碍物、车辆位姿标记和路径曲线。
+ */
+
 #pragma once
 
 #include "VisualizationData.hpp"

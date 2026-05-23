@@ -1,3 +1,11 @@
+/**
+ * @file Heuristic.hpp
+ * @brief Hybrid A*启发函数定义
+ *
+ * 定义启发函数接口和两种实现：欧几里得距离启发式
+ * 和考虑障碍物的组合启发式，用于指导搜索方向。
+ */
+
 #pragma once
 
 #include "Car.hpp"

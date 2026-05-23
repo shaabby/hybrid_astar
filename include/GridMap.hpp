@@ -1,3 +1,11 @@
+/**
+ * @file GridMap.hpp
+ * @brief 栅格地图定义
+ *
+ * 定义二维栅格地图数据结构，支持障碍物存储、起点/终点设置，
+ * 以及JSON格式地图文件的加载。
+ */
+
 #pragma once
 
 #include <cstdint>

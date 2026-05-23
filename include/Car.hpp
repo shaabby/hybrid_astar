@@ -1,3 +1,11 @@
+/**
+ * @file Car.hpp
+ * @brief 车辆模型定义
+ *
+ * 定义车辆位姿、物理配置和自行车运动学模型，
+ * 用于Hybrid A*规划器的前向模拟和碰撞检测。
+ */
+
 #pragma once
 
 #include <array>

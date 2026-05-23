@@ -1,3 +1,11 @@
+/**
+ * @file CollisionChecker.hpp
+ * @brief 碰撞检测器定义
+ *
+ * 提供车辆矩形footprint和Reeds-Shepp采样路径的碰撞检测功能，
+ * 用于验证规划路径的可行性。
+ */
+
 #pragma once
 
 #include "Car.hpp"
