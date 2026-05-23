@@ -196,7 +196,12 @@ void CombinedHeuristic::prepare(const GridMap& map,
     visibility_points_.clear();
     visibility_graph_.clear();
     visibility_distance_to_goal_.clear();
+    obstacle_lookup_.clear();
     visibility_goal_index_ = -1;
+    obstacle_lookup_width_ = 0;
+    obstacle_lookup_height_ = 0;
+    obstacle_lookup_resolution_ = std::max(
+        1.0e-9, config.obstacle_lookup_resolution);
 
     if (obstacle_enabled_) {
         if (config.debug) {
@@ -282,6 +287,13 @@ void CombinedHeuristic::prepare(const GridMap& map,
             runGraphDijkstra(visibility_graph_, visibility_goal_index_);
         if (config.debug) {
             std::cerr << "[debug] heuristic: Dijkstra complete\n";
+            std::cerr << "[debug] heuristic: build obstacle lookup\n";
+        }
+        buildObstacleLookup();
+        if (config.debug) {
+            std::cerr << "[debug] heuristic: obstacle lookup="
+                      << obstacle_lookup_width_ << "x"
+                      << obstacle_lookup_height_ << '\n';
         }
     } else if (config.debug) {
         std::cerr << "[debug] heuristic: obstacle heuristic disabled\n";
@@ -323,28 +335,24 @@ double CombinedHeuristic::euclidean(const CarPose& pose) const {
 }
 
 /**
- * @brief 使用可视点图计算障碍物启发式
- * @param[in] pose 当前位姿
- * @return 到目标的最短可视路径代价
- *
- * 如果当前点到目标有直接视域，返回欧几里得距离。
- * 否则，通过可视点中转：找到所有与当前点有视域的可视点，
- * 选择 distance(current, waypoint) + suffix(waypoint) 最小的组合。
+ * @brief 使用可视点图计算单个二维点的障碍物启发式。
  */
-double CombinedHeuristic::obstacleEstimate(const CarPose& pose) const {
+double CombinedHeuristic::obstacleEstimateAt(Point2D current) const {
     if (visibility_points_.empty() || visibility_distance_to_goal_.empty()) {
-        return euclidean(pose);
+        const double dx = current.x - goal_.x;
+        const double dy = current.y - goal_.y;
+        return std::sqrt(dx * dx + dy * dy);
     }
 
-    const Point2D current{.x = pose.x, .y = pose.y};
     const Point2D goal = goalPoint(goal_);
+    const double dx = current.x - goal.x;
+    const double dy = current.y - goal.y;
+    const double direct_distance = std::sqrt(dx * dx + dy * dy);
 
-    // 直接可视则返回欧几里得距离
     if (hasLineOfSight(current, goal, obstacle_cells_)) {
-        return euclidean(pose);
+        return direct_distance;
     }
 
-    // 通过可视点中转寻找最短路径
     double best = kInfinity;
     for (std::size_t i = 0; i < visibility_points_.size(); ++i) {
         if (static_cast<int>(i) == visibility_goal_index_) {
@@ -362,7 +370,64 @@ double CombinedHeuristic::obstacleEstimate(const CarPose& pose) const {
         best = std::min(best, distance2d(current, waypoint) + suffix);
     }
 
-    return std::isfinite(best) ? best : euclidean(pose);
+    return std::isfinite(best) ? best : direct_distance;
+}
+
+void CombinedHeuristic::buildObstacleLookup() {
+    obstacle_lookup_width_ = std::max(
+        2, static_cast<int>(std::ceil(static_cast<double>(width_)
+                                      / obstacle_lookup_resolution_)) + 1);
+    obstacle_lookup_height_ = std::max(
+        2, static_cast<int>(std::ceil(static_cast<double>(height_)
+                                      / obstacle_lookup_resolution_)) + 1);
+    obstacle_lookup_.assign(
+        static_cast<std::size_t>(obstacle_lookup_width_ * obstacle_lookup_height_),
+        0.0);
+
+    for (int y = 0; y < obstacle_lookup_height_; ++y) {
+        for (int x = 0; x < obstacle_lookup_width_; ++x) {
+            const Point2D current{
+                .x = static_cast<double>(x) * obstacle_lookup_resolution_,
+                .y = static_cast<double>(y) * obstacle_lookup_resolution_
+            };
+            obstacle_lookup_[static_cast<std::size_t>(
+                y * obstacle_lookup_width_ + x)] = obstacleEstimateAt(current);
+        }
+    }
+}
+
+/**
+ * @brief 使用预计算查表结果获取障碍物启发式
+ * @param[in] pose 当前位姿
+ * @return 到目标的最短可视路径代价
+ */
+double CombinedHeuristic::obstacleEstimate(const CarPose& pose) const {
+    if (obstacle_lookup_.empty()
+        || obstacle_lookup_width_ <= 0
+        || obstacle_lookup_height_ <= 0) {
+        return euclidean(pose);
+    }
+
+    const int x0 = std::clamp(
+        static_cast<int>(std::floor(pose.x / obstacle_lookup_resolution_)),
+        0,
+        obstacle_lookup_width_ - 1);
+    const int y0 = std::clamp(
+        static_cast<int>(std::floor(pose.y / obstacle_lookup_resolution_)),
+        0,
+        obstacle_lookup_height_ - 1);
+    const int x1 = std::min(x0 + 1, obstacle_lookup_width_ - 1);
+    const int y1 = std::min(y0 + 1, obstacle_lookup_height_ - 1);
+
+    const double v00 = obstacle_lookup_[static_cast<std::size_t>(
+        y0 * obstacle_lookup_width_ + x0)];
+    const double v10 = obstacle_lookup_[static_cast<std::size_t>(
+        y0 * obstacle_lookup_width_ + x1)];
+    const double v01 = obstacle_lookup_[static_cast<std::size_t>(
+        y1 * obstacle_lookup_width_ + x0)];
+    const double v11 = obstacle_lookup_[static_cast<std::size_t>(
+        y1 * obstacle_lookup_width_ + x1)];
+    return std::min(std::min(v00, v10), std::min(v01, v11));
 }
 
 /**

@@ -72,7 +72,9 @@ public:
 private:
     [[nodiscard]] double euclidean(const CarPose& pose) const;
     [[nodiscard]] double obstacleEstimate(const CarPose& pose) const;
+    [[nodiscard]] double obstacleEstimateAt(Point2D current) const;
     [[nodiscard]] double nonObstacleEstimate(const CarPose& pose) const;
+    void buildObstacleLookup();
 
     Pose2D goal_;
     int width_ = 0;
@@ -87,5 +89,9 @@ private:
     std::vector<Point2D> visibility_points_;
     std::vector<std::vector<std::pair<int, double>>> visibility_graph_;
     std::vector<double> visibility_distance_to_goal_;
+    std::vector<double> obstacle_lookup_;
     int visibility_goal_index_ = -1;
+    int obstacle_lookup_width_ = 0;
+    int obstacle_lookup_height_ = 0;
+    double obstacle_lookup_resolution_ = 1.0;
 };

@@ -170,7 +170,8 @@ void validateRequiredFields(const ConfigSeenFields& seen) {
                    "analytic_expansion_interval",
                    "collision_safety_margin",
                    "enable_obstacle_heuristic",
-                   "obstacle_heuristic_inflate_alpha", "debug",
+                   "obstacle_heuristic_inflate_alpha",
+                   "obstacle_lookup_resolution", "debug",
                    "debug_progress_interval"},
                   "hybrid_astar.");
 }
@@ -249,6 +250,8 @@ void applyHybridAstar(HybridAstarConfig& config, const ParsedLine& line) {
         config.enable_obstacle_heuristic = parseBool(line);
     } else if (line.key == "obstacle_heuristic_inflate_alpha") {
         config.obstacle_heuristic_inflate_alpha = parseDouble(line);
+    } else if (line.key == "obstacle_lookup_resolution") {
+        config.obstacle_lookup_resolution = parseDouble(line);
     } else if (line.key == "debug") {
         config.debug = parseBool(line);
     } else if (line.key == "debug_progress_interval") {
