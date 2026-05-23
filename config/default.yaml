@@ -19,9 +19,9 @@ hybrid_astar:
   goal_theta_tolerance: 0.05            # 到达目标的航向角容差，单位为弧度。
   reverse_penalty: 2.0                  # 倒车行驶的代价倍率。
   steer_penalty: 1.0                    # 使用转向角时的代价惩罚。
-  gear_switch_penalty: 1.0              # 前进和倒车方向切换时的额外代价。
+  gear_switch_penalty: 5.0              # 前进和倒车方向切换时的额外代价。
   steer_change_penalty: 1.0             # 相邻运动基元转向变化的额外代价。
-  max_iterations: 1200000                # 搜索循环最大迭代次数，超过后判定规划失败。
+  max_iterations: 120000               # 搜索循环最大迭代次数，超过后判定规划失败。
   allow_reverse: true                   # 是否允许规划器生成倒车运动。
   enable_analytic_expansion: true       # 是否启用 Reeds-Shepp 曲线直连目标。
   analytic_expansion_distance: 8        # 距离目标多近时允许尝试解析直连。
