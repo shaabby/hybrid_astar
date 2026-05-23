@@ -1,0 +1,7 @@
+map_path: map/default_map.json
+vehicle:
+  length: 4.5
+  width: 2.0
+  wheelbase: 2.7
+  rear_to_center: 1.35
+  max_steer: 0.61

@@ -1,0 +1,3 @@
+map_path: map/default_map.json
+hybrid_astar:
+  nope: 1
