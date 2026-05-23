@@ -123,19 +123,6 @@ hybrid_astar:
                   "hybrid_astar.debug should parse no");
 }
 
-void testDefaults(TestRunner& runner) {
-    const std::filesystem::path path = writeConfig(
-        "hybrid_astar_app_config_defaults.yaml",
-        "map_path: map/default_map.json\n");
-
-    const AppConfig config = AppConfigLoader::loadYaml(path.string());
-    runner.expect(near(config.vehicle.length, VehicleConfig{}.length),
-                  "missing vehicle fields should use defaults");
-    runner.expect(config.hybrid_astar.max_iterations
-                      == HybridAstarConfig{}.max_iterations,
-                  "missing planner fields should use defaults");
-}
-
 void expectThrows(TestRunner& runner,
                   std::string_view name,
                   std::string_view text,
@@ -156,6 +143,21 @@ void testErrors(TestRunner& runner) {
                  "vehicle:\n  length: 4.5\n",
                  "missing map_path should throw");
     expectThrows(runner,
+                 "hybrid_astar_app_config_missing_vehicle.yaml",
+                 "map_path: map/default_map.json\n",
+                 "missing vehicle fields should throw");
+    expectThrows(runner,
+                 "hybrid_astar_app_config_missing_planner.yaml",
+                 R"(map_path: map/default_map.json
+vehicle:
+  length: 4.5
+  width: 2.0
+  wheelbase: 2.7
+  rear_to_center: 1.35
+  max_steer: 0.61
+)",
+                 "missing planner fields should throw");
+    expectThrows(runner,
                  "hybrid_astar_app_config_unknown.yaml",
                  "map_path: map/default_map.json\nhybrid_astar:\n  nope: 1\n",
                  "unknown field should throw");
@@ -170,7 +172,6 @@ void testErrors(TestRunner& runner) {
 int main() {
     TestRunner runner;
     testLoadsFields(runner);
-    testDefaults(runner);
     testErrors(runner);
     return runner.result();
 }

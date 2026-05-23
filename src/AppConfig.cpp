@@ -5,9 +5,11 @@
 #include <charconv>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 namespace {
 
@@ -16,6 +18,12 @@ struct ParsedLine {
     std::string section;
     std::string key;
     std::string value;
+};
+
+struct ConfigSeenFields {
+    std::unordered_set<std::string> top_level;
+    std::unordered_set<std::string> vehicle;
+    std::unordered_set<std::string> hybrid_astar;
 };
 
 std::string readTextFile(const std::string& path) {
@@ -133,6 +141,50 @@ bool parseBool(const ParsedLine& line) {
     throw std::runtime_error(linePrefix(line) + " expects a bool");
 }
 
+void requireFields(const std::unordered_set<std::string>& seen,
+                   std::initializer_list<std::string_view> required,
+                   std::string_view prefix) {
+    for (std::string_view key : required) {
+        if (!seen.contains(std::string(key))) {
+            throw std::runtime_error(
+                "config yaml requires " + std::string(prefix)
+                + std::string(key));
+        }
+    }
+}
+
+void validateRequiredFields(const ConfigSeenFields& seen) {
+    requireFields(seen.top_level, {"map_path"}, "");
+    requireFields(seen.vehicle,
+                  {"length", "width", "wheelbase", "rear_to_center",
+                   "max_steer"},
+                  "vehicle.");
+    requireFields(seen.hybrid_astar,
+                  {"xy_resolution", "theta_bins", "step_size",
+                   "primitive_length", "goal_xy_tolerance",
+                   "goal_theta_tolerance", "reverse_penalty",
+                   "steer_penalty", "gear_switch_penalty",
+                   "steer_change_penalty", "max_iterations",
+                   "allow_reverse", "enable_analytic_expansion",
+                   "analytic_expansion_distance",
+                   "analytic_expansion_interval",
+                   "collision_safety_margin",
+                   "enable_obstacle_heuristic",
+                   "obstacle_heuristic_inflate_alpha", "debug",
+                   "debug_progress_interval"},
+                  "hybrid_astar.");
+}
+
+void markSeen(ConfigSeenFields& seen, const ParsedLine& line) {
+    if (line.section.empty()) {
+        seen.top_level.insert(line.key);
+    } else if (line.section == "vehicle") {
+        seen.vehicle.insert(line.key);
+    } else if (line.section == "hybrid_astar") {
+        seen.hybrid_astar.insert(line.key);
+    }
+}
+
 void applyTopLevel(AppConfig& config, const ParsedLine& line) {
     if (line.key == "map_path") {
         config.map_path = unquote(line.value);
@@ -206,7 +258,9 @@ void applyHybridAstar(HybridAstarConfig& config, const ParsedLine& line) {
     }
 }
 
-void applyLine(AppConfig& config, const ParsedLine& line) {
+void applyLine(AppConfig& config,
+               ConfigSeenFields& seen,
+               const ParsedLine& line) {
     if (line.section.empty()) {
         applyTopLevel(config, line);
     } else if (line.section == "vehicle") {
@@ -216,6 +270,7 @@ void applyLine(AppConfig& config, const ParsedLine& line) {
     } else {
         throw std::runtime_error(linePrefix(line) + " has unknown section");
     }
+    markSeen(seen, line);
 }
 
 } // namespace
@@ -223,6 +278,7 @@ void applyLine(AppConfig& config, const ParsedLine& line) {
 AppConfig AppConfigLoader::loadYaml(const std::string& path) {
     const std::string text = readTextFile(path);
     AppConfig config;
+    ConfigSeenFields seen;
     std::string current_section;
 
     std::size_t line_start = 0;
@@ -287,12 +343,10 @@ AppConfig AppConfigLoader::loadYaml(const std::string& path) {
                 "line " + std::to_string(line_number)
                 + " is indented but no section is active");
         }
-        applyLine(config, parsed);
+        applyLine(config, seen, parsed);
     }
 
-    if (config.map_path.empty()) {
-        throw std::runtime_error("config yaml requires map_path");
-    }
+    validateRequiredFields(seen);
 
     return config;
 }

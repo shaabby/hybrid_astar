@@ -19,9 +19,6 @@ constexpr double kEpsilon = 1.0e-9;
 
 } // namespace
 
-/** @brief 使用默认配置构造车辆。 */
-Car::Car() = default;
-
 /**
  * @brief 使用自定义配置构造车辆。
  * @param[in] config 车辆物理参数

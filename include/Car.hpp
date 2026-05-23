@@ -17,11 +17,11 @@ struct CarPose {
  * @brief 车辆物理配置参数。
  */
 struct VehicleConfig {
-    double length = 4.5;          ///< 车身长度
-    double width = 2.0;           ///< 车身宽度
-    double wheelbase = 2.7;       ///< 轴距
-    double rear_to_center = 1.35; ///< 后轴到车身中心的距离
-    double max_steer = 0.61;      ///< 最大前轮转向角，弧度
+    double length;          ///< 车身长度
+    double width;           ///< 车身宽度
+    double wheelbase;       ///< 轴距
+    double rear_to_center;  ///< 后轴到车身中心的距离
+    double max_steer;       ///< 最大前轮转向角，弧度
 };
 
 /**
@@ -31,9 +31,6 @@ struct VehicleConfig {
  */
 class Car {
 public:
-    /** @brief 使用默认配置构造车辆。 */
-    Car();
-
     /**
      * @brief 使用自定义配置构造车辆。
      * @param[in] config 车辆物理参数

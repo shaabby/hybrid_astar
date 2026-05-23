@@ -246,7 +246,13 @@ int main() {
             std::string(HYBRID_ASTAR_SOURCE_DIR)
             + "/output/reeds_shepp_empty_map_test.json";
         const GridMap map = MapLoader::loadJson(map_path);
-        const Car car;
+        const Car car(VehicleConfig{
+            .length = 4.5,
+            .width = 2.0,
+            .wheelbase = 2.7,
+            .rear_to_center = 1.35,
+            .max_steer = 0.61
+        });
         const VehicleCollisionChecker vehicle_checker(map, car);
         const ReedsSheppCollisionChecker collision_checker(map, car);
         const ReedsSheppGenerator generator(
