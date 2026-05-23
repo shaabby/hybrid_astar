@@ -21,8 +21,8 @@ if [[ ! -x "${EXECUTABLE}" && -x "${BUILD_DIR}/${BUILD_TYPE}/hybrid_astar.exe" ]
 fi
 
 if [[ "$#" -eq 0 ]]; then
-    echo "[run] Running map/default_map.json..."
-    "${EXECUTABLE}" map/default_map.json
+    echo "[run] Running config/default.yaml..."
+    "${EXECUTABLE}" config/default.yaml
 else
     echo "[run] Running $*..."
     "${EXECUTABLE}" "$@"

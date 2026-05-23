@@ -76,6 +76,19 @@ target_include_directories(line_of_sight_test
 add_test(NAME line_of_sight_test
          COMMAND line_of_sight_test)
 
+add_executable(app_config_test
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/app_config_test.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/AppConfig.cpp"
+)
+
+target_include_directories(app_config_test
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+add_test(NAME app_config_test
+         COMMAND app_config_test)
+
 add_executable(path_json_viewer
     "${CMAKE_CURRENT_SOURCE_DIR}/tool/path_json_viewer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/FltkCanvas.cpp"
@@ -102,10 +115,12 @@ if(MSVC)
     target_compile_options(hybrid_astar PRIVATE /W4)
     target_compile_options(reeds_shepp_empty_map_test PRIVATE /W4)
     target_compile_options(line_of_sight_test PRIVATE /W4)
+    target_compile_options(app_config_test PRIVATE /W4)
     target_compile_options(path_json_viewer PRIVATE /W4)
 else()
     target_compile_options(hybrid_astar PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(reeds_shepp_empty_map_test PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(line_of_sight_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(app_config_test PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(path_json_viewer PRIVATE -Wall -Wextra -Wpedantic)
 endif()

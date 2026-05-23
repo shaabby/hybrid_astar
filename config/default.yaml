@@ -1,0 +1,30 @@
+map_path: map/default_map.json
+
+vehicle:
+  length: 4.5
+  width: 2.0
+  wheelbase: 2.7
+  rear_to_center: 1.35
+  max_steer: 0.61
+
+hybrid_astar:
+  xy_resolution: 1.0
+  theta_bins: 360
+  step_size: 0.2
+  primitive_length: 1.2
+  goal_xy_tolerance: 1.0
+  goal_theta_tolerance: 0.2
+  reverse_penalty: 1.0
+  steer_penalty: 1.0
+  gear_switch_penalty: 0.0
+  steer_change_penalty: 0.0
+  max_iterations: 12000
+  allow_reverse: true
+  enable_analytic_expansion: false
+  analytic_expansion_distance: 100.0
+  analytic_expansion_interval: 1
+  collision_safety_margin: 0.0
+  enable_obstacle_heuristic: true
+  obstacle_heuristic_inflate_alpha: 1.0
+  debug: true
+  debug_progress_interval: 500

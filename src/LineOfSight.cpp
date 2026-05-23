@@ -40,22 +40,6 @@ int sign(double value, double eps) {
 }
 
 /**
- * @brief 计算沿移动方向遇到的第一个网格线边界
- * @param coordinate 当前坐标值
- * @param step 步进方向（+1或-1）
- * @return 遇到的第一个网格边界的坐标
- *
- * 正向步进时，返回下一个整数边界（floor + 1）。
- * 负向步进时，返回当前整数边界（floor）。
- */
-double firstGridBoundary(double coordinate, int step) {
-    if (step > 0) {
-        return static_cast<double>(std::floor(coordinate) + 1);
-    }
-    return static_cast<double>(std::floor(coordinate));
-}
-
-/**
  * @brief 如果单元格不存在则将其追加到列表中
  * @param cells 要追加的向量
  * @param cell 要添加的单元格
@@ -79,31 +63,64 @@ bool onGridLine(double value, double eps) {
     return std::abs(value - std::round(value)) <= eps;
 }
 
-/**
- * @brief 将点所在的所有单元格追加到单元格列表
- * @param cells 要追加细胞的向量
- * @param point 要处理的点
- * @param eps 网格线检测的epsilon容差
- *
- * 当点恰好落在网格线或网格交点时，
- * 会添加额外的相邻单元格以实现超级覆盖属性。
- */
-void appendCellsForPoint(std::vector<HashCell>& cells, Point2D point, double eps) {
-    const int x = floorToCell(point.x);
-    const int y = floorToCell(point.y);
-    appendUnique(cells, {x, y});
+std::vector<int> directedAxisCells(double coordinate,
+                                   int step,
+                                   bool is_end_point,
+                                   double eps) {
+    const int cell = floorToCell(coordinate);
+    if (!onGridLine(coordinate, eps)) {
+        return {cell};
+    }
+    if (step == 0) {
+        return {cell, cell - 1};
+    }
+    if (step > 0) {
+        return {is_end_point ? cell - 1 : cell};
+    }
+    return {is_end_point ? cell : cell - 1};
+}
 
-    if (onGridLine(point.x, eps)) {
-        appendUnique(cells, {x - 1, y});
-    }
-    if (onGridLine(point.y, eps)) {
-        appendUnique(cells, {x, y - 1});
-    }
-    if (onGridLine(point.x, eps) && onGridLine(point.y, eps)) {
-        appendUnique(cells, {x - 1, y - 1});
+void appendCellsForDirectedPoint(std::vector<HashCell>& cells,
+                                 Point2D point,
+                                 int step_x,
+                                 int step_y,
+                                 bool is_end_point,
+                                 double eps) {
+    const std::vector<int> x_cells =
+        directedAxisCells(point.x, step_x, is_end_point, eps);
+    const std::vector<int> y_cells =
+        directedAxisCells(point.y, step_y, is_end_point, eps);
+
+    for (const int x : x_cells) {
+        for (const int y : y_cells) {
+            appendUnique(cells, {x, y});
+        }
     }
 }
 
+int startCellIndex(double coordinate, int step, double eps) {
+    if (step < 0 && onGridLine(coordinate, eps)) {
+        return floorToCell(coordinate) - 1;
+    }
+    return floorToCell(coordinate);
+}
+
+int endCellIndex(double coordinate, int step, double eps) {
+    if (step > 0 && onGridLine(coordinate, eps)) {
+        return floorToCell(coordinate) - 1;
+    }
+    return floorToCell(coordinate);
+}
+
+double firstGridBoundary(double coordinate, int step, double eps) {
+    if (step > 0) {
+        return static_cast<double>(std::floor(coordinate) + 1);
+    }
+    if (onGridLine(coordinate, eps)) {
+        return static_cast<double>(std::floor(coordinate) - 1);
+    }
+    return static_cast<double>(std::floor(coordinate));
+}
 
 } // namespace
 
@@ -142,15 +159,16 @@ std::vector<HashCell> supercoverDdaCells(Point2D a, Point2D b, double eps) {
     const int step_x = sign(dx, eps);
     const int step_y = sign(dy, eps);
 
-    int x = floorToCell(a.x);
-    int y = floorToCell(a.y);
-    const int end_x = floorToCell(b.x);
-    const int end_y = floorToCell(b.y);
-    appendCellsForPoint(cells, a, eps);
-
     if (step_x == 0 && step_y == 0) {
+        appendUnique(cells, {floorToCell(a.x), floorToCell(a.y)});
         return cells;
     }
+
+    int x = startCellIndex(a.x, step_x, eps);
+    int y = startCellIndex(a.y, step_y, eps);
+    const int end_x = endCellIndex(b.x, step_x, eps);
+    const int end_y = endCellIndex(b.y, step_y, eps);
+    appendCellsForDirectedPoint(cells, a, step_x, step_y, false, eps);
 
     const bool horizontal_on_grid_line = step_y == 0 && onGridLine(a.y, eps);
     const bool vertical_on_grid_line = step_x == 0 && onGridLine(a.x, eps);
@@ -161,10 +179,10 @@ std::vector<HashCell> supercoverDdaCells(Point2D a, Point2D b, double eps) {
 
     double t_max_x = step_x == 0
         ? infinity
-        : (firstGridBoundary(a.x, step_x) - a.x) / dx;
+        : (firstGridBoundary(a.x, step_x, eps) - a.x) / dx;
     double t_max_y = step_y == 0
         ? infinity
-        : (firstGridBoundary(a.y, step_y) - a.y) / dy;
+        : (firstGridBoundary(a.y, step_y, eps) - a.y) / dy;
 
     if (t_max_x < 0.0) {
         t_max_x = 0.0;
@@ -196,7 +214,7 @@ std::vector<HashCell> supercoverDdaCells(Point2D a, Point2D b, double eps) {
             appendUnique(cells, {x - 1, y});
         }
     }
-    appendCellsForPoint(cells, b, eps);
+    appendCellsForDirectedPoint(cells, b, step_x, step_y, true, eps);
 
     return cells;
 }

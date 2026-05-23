@@ -1,3 +1,4 @@
+#include "AppConfig.hpp"
 #include "Car.hpp"
 #include "ExperimentLogger.hpp"
 #include "FltkViewer.hpp"
@@ -19,7 +20,7 @@
 namespace {
 
 struct AppOptions {
-    std::string map_path = "map/default_map.json";
+    std::string config_path;
     bool show_viewer = true;
 };
 
@@ -33,7 +34,7 @@ void writeTextFile(const std::filesystem::path& path, const std::string& text) {
 
 void printUsage(const char* executable) {
     std::cout
-        << "Usage: " << executable << " [--no-view] [map.json]\n"
+        << "Usage: " << executable << " [--no-view] config.yaml\n"
         << "       " << executable << " --help\n";
 }
 
@@ -43,7 +44,7 @@ void debugStage(const std::string& message) {
 
 AppOptions parseOptions(int argc, char* argv[]) {
     AppOptions options;
-    bool saw_map_path = false;
+    bool saw_config_path = false;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -58,11 +59,15 @@ AppOptions parseOptions(int argc, char* argv[]) {
         if (!arg.empty() && arg.front() == '-') {
             throw std::runtime_error("Unknown option: " + arg);
         }
-        if (saw_map_path) {
-            throw std::runtime_error("Only one map path can be specified");
+        if (saw_config_path) {
+            throw std::runtime_error("Only one config path can be specified");
         }
-        options.map_path = arg;
-        saw_map_path = true;
+        options.config_path = arg;
+        saw_config_path = true;
+    }
+
+    if (!saw_config_path) {
+        throw std::runtime_error("Missing config yaml path");
     }
 
     return options;
@@ -74,11 +79,13 @@ int main(int argc, char* argv[]) {
     try {
         debugStage("parse command line options");
         const AppOptions options = parseOptions(argc, argv);
-        debugStage("load map: " + options.map_path);
-        const GridMap map = MapLoader::loadJson(options.map_path);
+        debugStage("load config: " + options.config_path);
+        const AppConfig app_config = AppConfigLoader::loadYaml(options.config_path);
+        debugStage("load map: " + app_config.map_path);
+        const GridMap map = MapLoader::loadJson(app_config.map_path);
         debugStage("construct vehicle model and planner");
-        const Car car;
-        const HybridAstarConfig config;
+        const Car car(app_config.vehicle);
+        const HybridAstarConfig config = app_config.hybrid_astar;
         const HybridAstar planner(config);
         debugStage("run Hybrid A* planning");
         const auto plan_start = std::chrono::steady_clock::now();
@@ -89,7 +96,7 @@ int main(int argc, char* argv[]) {
         std::filesystem::create_directories("output");
         debugStage("append experiment log");
         ExperimentLogEntry log_entry;
-        log_entry.map_path = options.map_path;
+        log_entry.map_path = app_config.map_path;
         log_entry.success = plan.success;
         log_entry.path_poses = plan.path.size();
         log_entry.expanded_nodes = plan.expanded.size();
@@ -119,7 +126,8 @@ int main(int argc, char* argv[]) {
         const Pose2D& goal = map.goal();
 
         std::cout << "Loaded grid map\n";
-        std::cout << "  file: " << options.map_path << '\n';
+        std::cout << "  config: " << options.config_path << '\n';
+        std::cout << "  file: " << app_config.map_path << '\n';
         std::cout << "  size: " << map.width() << " x " << map.height() << '\n';
         std::cout << "  obstacles: " << map.obstacleCount() << '\n';
         std::cout << "  start: (" << start.x << ", " << start.y << ", "

@@ -25,12 +25,12 @@ struct HybridAstarConfig {
     double step_size = 0.2;                 ///< 数值积分步长
     double primitive_length = 1.2;          ///< 单个运动基元长度
     double goal_xy_tolerance = 1;           ///< 目标位置容差
-    double goal_theta_tolerance = 0.8;      ///< 目标航向角容差（弧度）
+    double goal_theta_tolerance = 0.2;      ///< 目标航向角容差（弧度）
     double reverse_penalty = 1;             ///< 倒车代价惩罚系数
-    double steer_penalty = 0;               ///< 转向代价惩罚系数
-    double gear_switch_penalty = 0;          ///< 前进/倒车切换惩罚
+    double steer_penalty = 1;               ///< 转向代价惩罚系数
+    double gear_switch_penalty = 1;          ///< 前进/倒车切换惩罚
     double steer_change_penalty = 0;         ///< 相邻运动基元转向变化惩罚
-    int max_iterations = 12000;             ///< 最大搜索迭代次数
+    int max_iterations = 120000;             ///< 最大搜索迭代次数
     bool allow_reverse = true;               ///< 是否允许倒车运动
     bool enable_analytic_expansion = false;  ///< 是否启用Reeds-Shepp直连目标
     double analytic_expansion_distance = 100.0; ///< 尝试直连目标的距离阈值
