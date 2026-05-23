@@ -31,6 +31,7 @@ Hybrid A* 生成车辆位姿序列
 ```text
 output/result.json
 output/demo.html
+output/experiments.csv
 ```
 
 动画页面支持：
@@ -44,6 +45,21 @@ output/demo.html
 
 ## 构建与运行
 
+推荐直接使用项目脚本：
+
+```bash
+./run.sh
+```
+
+脚本会在首次运行时配置 CMake，之后构建并运行默认配置：
+
+```text
+config/default.yaml
+```
+
+`run.sh` 默认把编译临时目录设置到 `build/tmp`。这样即使系统 `/tmp`
+空间不足，编译器生成的临时文件也会写在项目构建目录下。
+
 构建：
 
 ```bash
@@ -51,25 +67,29 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-运行默认地图：
+手动运行默认配置：
 
 ```bash
-./build/hybrid_astar
+./build/hybrid_astar config/default.yaml
 ```
 
-默认会在规划完成后打开 FLTK 动画窗口，同时仍然生成
-`output/result.json` 和 `output/demo.html`，方便用浏览器页面对照调试。
+默认配置会读取 `map/default_map.json`。规划完成后程序会生成
+`output/result.json`、`output/demo.html` 和 `output/experiments.csv`，
+并尝试打开 FLTK 动画窗口。
 
 只生成输出文件、不打开 FLTK 窗口：
 
 ```bash
-./build/hybrid_astar --no-view
+./build/hybrid_astar --no-view config/default.yaml
 ```
 
-指定地图：
+`--html-only` 是 `--no-view` 的等价写法。无桌面显示、SSH、容器或 CI
+环境下推荐使用这个模式，否则 FLTK 可能报 `Can't open display`。
+
+指定其他配置：
 
 ```bash
-./build/hybrid_astar map/default_map.json
+./build/hybrid_astar config/other.yaml
 ```
 
 然后打开：
@@ -86,11 +106,76 @@ output/experiments.csv
 
 日志包含地图路径、是否成功、路径点数量、扩展节点数量、规划耗时、起终点位姿、主要代价参数和启发式名称，方便对比不同参数或地图下的规划效果。
 
+配置文件基本格式见 `config/default.yaml`：
+
+```yaml
+map_path: map/default_map.json
+
+vehicle:
+  length: 4.5
+  width: 2.0
+  wheelbase: 2.7
+  rear_to_center: 1.35
+  max_steer: 0.61
+
+hybrid_astar:
+  xy_resolution: 1.0
+  theta_bins: 360
+  step_size: 0.2
+  primitive_length: 1.2
+  goal_xy_tolerance: 0.2
+  goal_theta_tolerance: 0.05
+  reverse_penalty: 2.0
+  steer_penalty: 1.0
+  gear_switch_penalty: 1.0
+  steer_change_penalty: 1.0
+  max_iterations: 120000
+  allow_reverse: true
+  enable_analytic_expansion: true
+  analytic_expansion_distance: 30.0
+  analytic_expansion_interval: 25
+  collision_safety_margin: 0.0
+  enable_obstacle_heuristic: true
+  obstacle_heuristic_inflate_alpha: 1.0
+  debug: true
+  debug_progress_interval: 500
+```
+
 Windows 使用 Visual Studio 生成器时，可执行文件通常在：
 
 ```text
 build/Release/hybrid_astar.exe
 ```
+
+### 常见运行问题
+
+如果编译时报：
+
+```text
+fatal error: error writing to /tmp/...: No space left on device
+```
+
+说明系统临时目录所在分区空间不足。优先使用 `./run.sh`，它会自动使用
+`build/tmp` 作为临时目录。手动构建时也可以显式指定：
+
+```bash
+TMPDIR="$PWD/build/tmp" cmake --build build --config Release
+```
+
+如果运行结束时报：
+
+```text
+Can't open display: :0
+```
+
+说明当前环境没有可用图形显示。规划结果和 HTML 文件通常已经写出，可以
+改用：
+
+```bash
+./build/hybrid_astar --no-view config/default.yaml
+```
+
+再打开 `output/demo.html` 查看动画。
 
 ## 地图编辑
 

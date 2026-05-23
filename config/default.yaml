@@ -1,30 +1,33 @@
+# 地图文件路径，程序启动时会从该 JSON 文件读取障碍物、起点和终点。
 map_path: map/default_map.json
 
+# 车辆物理参数，单位为地图坐标单位；角度均使用弧度。
 vehicle:
-  length: 4.5
-  width: 2.0
-  wheelbase: 2.7
-  rear_to_center: 1.35
-  max_steer: 0.61
+  length: 4.5          # 车身总长度。
+  width: 2.0           # 车身宽度。
+  wheelbase: 2.7       # 前后轴之间的距离，影响最小转弯半径。
+  rear_to_center: 1.35 # 后轴中心到车身几何中心的距离。
+  max_steer: 0.61      # 前轮最大转向角，单位为弧度。
 
+# Hybrid A* 路径规划器参数。
 hybrid_astar:
-  xy_resolution: 1.0
-  theta_bins: 360
-  step_size: 0.2
-  primitive_length: 1.2
-  goal_xy_tolerance: 0.2
-  goal_theta_tolerance: 0.05
-  reverse_penalty: 2.0
-  steer_penalty: 1.0
-  gear_switch_penalty: 1.0
-  steer_change_penalty: 1.0
-  max_iterations: 120000
-  allow_reverse: true
-  enable_analytic_expansion: true
-  analytic_expansion_distance: 30.0
-  analytic_expansion_interval: 25
-  collision_safety_margin: 0.0
-  enable_obstacle_heuristic: true
-  obstacle_heuristic_inflate_alpha: 1.0
-  debug: true
-  debug_progress_interval: 500
+  xy_resolution: 1.0                    # x/y 位置离散分辨率，用于搜索节点去重。
+  theta_bins: 360                       # 航向角离散分箱数，数值越大角度状态越细。
+  step_size: 0.2                        # 车辆运动学前向积分步长。
+  primitive_length: 1.2                 # 每个运动基元的模拟长度。
+  goal_xy_tolerance: 0.2                # 到达目标的位置容差。
+  goal_theta_tolerance: 0.05            # 到达目标的航向角容差，单位为弧度。
+  reverse_penalty: 2.0                  # 倒车行驶的代价倍率。
+  steer_penalty: 1.0                    # 使用转向角时的代价惩罚。
+  gear_switch_penalty: 1.0              # 前进和倒车方向切换时的额外代价。
+  steer_change_penalty: 1.0             # 相邻运动基元转向变化的额外代价。
+  max_iterations: 120000                # 搜索循环最大迭代次数，超过后判定规划失败。
+  allow_reverse: true                   # 是否允许规划器生成倒车运动。
+  enable_analytic_expansion: true       # 是否启用 Reeds-Shepp 曲线直连目标。
+  analytic_expansion_distance: 30.0     # 距离目标多近时允许尝试解析直连。
+  analytic_expansion_interval: 25       # 搜索中每隔多少次扩展尝试一次解析直连。
+  collision_safety_margin: 0.0          # 碰撞检测时对车辆外轮廓额外外扩的安全距离。
+  enable_obstacle_heuristic: true       # 是否启用考虑障碍物的启发式代价。
+  obstacle_heuristic_inflate_alpha: 1.0 # 障碍物启发式膨胀系数，越大越倾向远离障碍物。
+  debug: true                           # 是否输出规划阶段和搜索进度调试信息。
+  debug_progress_interval: 500          # debug 开启时，每隔多少次迭代输出一次搜索进度。

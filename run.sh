@@ -4,8 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${ROOT_DIR}/build"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
+TMPDIR="${TMPDIR:-${BUILD_DIR}/tmp}"
 
 cd "${ROOT_DIR}"
+
+mkdir -p "${TMPDIR}"
+export TMPDIR
 
 if [[ ! -f "${BUILD_DIR}/CMakeCache.txt" ]]; then
     echo "[run] Configuring CMake (${BUILD_TYPE})..."
