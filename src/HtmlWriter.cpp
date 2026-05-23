@@ -1,3 +1,11 @@
+/**
+ * @file HtmlWriter.cpp
+ * @brief HTML可视化包装器实现
+ *
+ * 将JSON格式的规划结果嵌入HTML模板，生成可在浏览器中
+ * 查看的交互式可视化页面。
+ */
+
 #include "HtmlWriter.hpp"
 
 std::string HtmlWriter::wrap(const std::string& json) {

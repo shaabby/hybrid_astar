@@ -1,9 +1,24 @@
+/**
+ * @file JsonExporter.cpp
+ * @brief JSON数据导出器实现
+ *
+ * 将规划结果序列化为JSON字符串，供浏览器端可视化使用。
+ */
+
 #include "JsonExporter.hpp"
 
 #include <iomanip>
 #include <sstream>
 #include <string>
 
+/**
+ * @brief 导出完整规划结果
+ * @param[in] map      栅格地图
+ * @param[in] car      车辆模型
+ * @param[in] path     路径点序列
+ * @param[in] expanded 搜索扩展节点
+ * @return JSON字符串
+ */
 std::string JsonExporter::exportPath(const GridMap& map,
                                       const Car& car,
                                       const std::vector<CarPose>& path,
@@ -20,6 +35,11 @@ std::string JsonExporter::exportPath(const GridMap& map,
     return out.str();
 }
 
+/**
+ * @brief 导出地图数据
+ * @param[in] map 栅格地图
+ * @return JSON对象字符串
+ */
 std::string JsonExporter::exportMap(const GridMap& map) {
     const Pose2D& start = map.start();
     const Pose2D& goal = map.goal();
@@ -55,6 +75,11 @@ std::string JsonExporter::exportMap(const GridMap& map) {
     return out.str();
 }
 
+/**
+ * @brief 导出车辆配置
+ * @param[in] vehicle 车辆物理参数
+ * @return JSON对象字符串
+ */
 std::string JsonExporter::exportVehicle(const VehicleConfig& vehicle) {
     std::ostringstream out;
     out << std::fixed << std::setprecision(6);
@@ -68,6 +93,11 @@ std::string JsonExporter::exportVehicle(const VehicleConfig& vehicle) {
     return out.str();
 }
 
+/**
+ * @brief 导出路径点序列
+ * @param[in] path 路径点序列
+ * @return JSON数组字符串
+ */
 std::string JsonExporter::exportPathPoints(
     const std::vector<CarPose>& path) {
     std::ostringstream out;

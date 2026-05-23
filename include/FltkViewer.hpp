@@ -1,3 +1,11 @@
+/**
+ * @file FltkViewer.hpp
+ * @brief FLTK规划结果查看器定义
+ *
+ * 提供基于FLTK的交互式路径规划可视化界面，
+ * 支持播放控制、时间轴滑块和帧步进。
+ */
+
 #pragma once
 
 #include "FltkCanvas.hpp"
@@ -11,34 +19,56 @@
 #include <memory>
 #include <string>
 
+/**
+ * @brief FLTK交互式规划结果查看器
+ *
+ * 提供播放/暂停、步进、重置按钮和时间轴滑块，
+ * 用于动画展示Hybrid A*路径规划结果。
+ */
 class FltkViewer {
 public:
+    /**
+     * @brief 构造查看器
+     * @param[in] data 可视化数据引用
+     */
     explicit FltkViewer(const VisualizationData& data);
 
+    /** @brief 进入FLTK事件循环，返回窗口关闭状态。 */
     int run();
 
 private:
+    /** @brief 播放/暂停按钮回调。 */
     static void toggleCallback(Fl_Widget* widget, void* user_data);
+    /** @brief 步进按钮回调。 */
     static void stepCallback(Fl_Widget* widget, void* user_data);
+    /** @brief 重置按钮回调。 */
     static void resetCallback(Fl_Widget* widget, void* user_data);
+    /** @brief 滑块值改变回调。 */
     static void sliderCallback(Fl_Widget* widget, void* user_data);
+    /** @brief 定时器回调，用于自动播放。 */
     static void timerCallback(void* user_data);
 
+    /** @brief 切换播放/暂停状态。 */
     void togglePlayback();
+    /** @brief 前进一帧。 */
     void step();
+    /** @brief 重置到第一帧。 */
     void reset();
+    /** @brief 设置当前帧号。 */
     void setFrame(int frame);
+    /** @brief 同步控件状态。 */
     void syncControls();
+    /** @brief 定时触发器，播放下一帧。 */
     void tick();
 
-    const VisualizationData& data_;
-    std::unique_ptr<Fl_Double_Window> window_;
-    FltkCanvas* canvas_ = nullptr;
-    Fl_Button* toggle_button_ = nullptr;
-    Fl_Button* step_button_ = nullptr;
-    Fl_Button* reset_button_ = nullptr;
-    Fl_Hor_Value_Slider* slider_ = nullptr;
-    Fl_Box* frame_label_ = nullptr;
-    bool playing_ = true;
-    std::string frame_label_text_;
+    const VisualizationData& data_;                      ///< 可视化数据引用
+    std::unique_ptr<Fl_Double_Window> window_;          ///< 主窗口
+    FltkCanvas* canvas_ = nullptr;                      ///< 画布组件
+    Fl_Button* toggle_button_ = nullptr;                 ///< 播放/暂停按钮
+    Fl_Button* step_button_ = nullptr;                  ///< 步进按钮
+    Fl_Button* reset_button_ = nullptr;                 ///< 重置按钮
+    Fl_Hor_Value_Slider* slider_ = nullptr;              ///< 时间轴滑块
+    Fl_Box* frame_label_ = nullptr;                      ///< 帧号标签
+    bool playing_ = true;                                ///< 是否正在播放
+    std::string frame_label_text_;                       ///< 帧号文本缓存
 };

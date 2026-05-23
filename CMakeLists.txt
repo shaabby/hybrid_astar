@@ -63,6 +63,19 @@ target_compile_definitions(reeds_shepp_empty_map_test
 add_test(NAME reeds_shepp_empty_map_test
          COMMAND reeds_shepp_empty_map_test)
 
+add_executable(line_of_sight_test
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/line_of_sight_test.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/LineOfSight.cpp"
+)
+
+target_include_directories(line_of_sight_test
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+add_test(NAME line_of_sight_test
+         COMMAND line_of_sight_test)
+
 add_executable(path_json_viewer
     "${CMAKE_CURRENT_SOURCE_DIR}/tool/path_json_viewer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/FltkCanvas.cpp"
@@ -88,9 +101,11 @@ target_link_libraries(path_json_viewer
 if(MSVC)
     target_compile_options(hybrid_astar PRIVATE /W4)
     target_compile_options(reeds_shepp_empty_map_test PRIVATE /W4)
+    target_compile_options(line_of_sight_test PRIVATE /W4)
     target_compile_options(path_json_viewer PRIVATE /W4)
 else()
     target_compile_options(hybrid_astar PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(reeds_shepp_empty_map_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(line_of_sight_test PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(path_json_viewer PRIVATE -Wall -Wextra -Wpedantic)
 endif()

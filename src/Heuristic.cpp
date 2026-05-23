@@ -1,9 +1,17 @@
+/**
+ * @file Heuristic.cpp
+ * @brief Hybrid A*启发函数实现
+ *
+ * 实现欧几里得距离启发式和组合启发式。
+ * 组合启发式综合无障碍Reeds-Shepp距离和基于可视点的图搜索代价。
+ */
+
 #include "Heuristic.hpp"
 #include "HybridAstar.hpp"
+#include "LineOfSight.hpp"
 #include "ReedsShepp.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <limits>
 #include <queue>
@@ -16,135 +24,60 @@
 
 namespace {
 
+/// @brief 无穷大常量
 constexpr double kInfinity = std::numeric_limits<double>::infinity();
 
-int indexOf(int x, int y, int width) {
-    return y * width + x;
+/**
+ * @brief 计算二维欧几里得距离
+ * @param[in] lhs 第一个二维点
+ * @param[in] rhs 第二个二维点
+ * @return 两点间的欧几里得距离
+ */
+double distance2d(Point2D lhs, Point2D rhs) {
+    const double dx = lhs.x - rhs.x;
+    const double dy = lhs.y - rhs.y;
+    return std::sqrt(dx * dx + dy * dy);
 }
 
-bool inBounds(int x, int y, int width, int height) {
-    return x >= 0 && y >= 0 && x < width && y < height;
+/**
+ * @brief 将Pose2D转换为Point2D
+ * @param[in] goal 二维位姿
+ * @return 二维点
+ */
+Point2D goalPoint(const Pose2D& goal) {
+    return {.x = goal.x, .y = goal.y};
 }
 
-bool withinInflationRadius(int candidate_x,
-                           int candidate_y,
-                           int obstacle_x,
-                           int obstacle_y,
-                           double radius) {
-    if (radius <= 0.0) {
-        return candidate_x == obstacle_x && candidate_y == obstacle_y;
-    }
-
-    const double center_x = static_cast<double>(candidate_x) + 0.5;
-    const double center_y = static_cast<double>(candidate_y) + 0.5;
-    const double obstacle_left = static_cast<double>(obstacle_x);
-    const double obstacle_right = obstacle_left + 1.0;
-    const double obstacle_bottom = static_cast<double>(obstacle_y);
-    const double obstacle_top = obstacle_bottom + 1.0;
-
-    const double dx = std::max({
-        obstacle_left - center_x,
-        0.0,
-        center_x - obstacle_right
-    });
-    const double dy = std::max({
-        obstacle_bottom - center_y,
-        0.0,
-        center_y - obstacle_top
-    });
-    return dx * dx + dy * dy <= radius * radius;
-}
-
-std::vector<std::uint8_t> makeInflatedObstacles(const GridMap& map,
-                                                const Car& car,
-                                                double inflate_alpha) {
-    const int width = map.width();
-    const int height = map.height();
-    std::vector<std::uint8_t> inflated(
-        static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
-
-    const double radius = std::max(0.0, inflate_alpha) * car.config().width * 0.5;
-    const int cell_radius = static_cast<int>(std::ceil(radius));
-
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            if (!map.isObstacle(x, y)) {
-                continue;
-            }
-
-            for (int yy = y - cell_radius; yy <= y + cell_radius; ++yy) {
-                for (int xx = x - cell_radius; xx <= x + cell_radius; ++xx) {
-                    if (!inBounds(xx, yy, width, height)) {
-                        continue;
-                    }
-                    if (withinInflationRadius(xx, yy, x, y, radius)) {
-                        inflated[static_cast<std::size_t>(indexOf(xx, yy, width))] = 1;
-                    }
-                }
-            }
-        }
-    }
-
-    return inflated;
-}
-
-std::vector<double> runReverseDijkstra(const GridMap& map,
-                                       const std::vector<std::uint8_t>& blocked,
-                                       double xy_resolution) {
-    const int width = map.width();
-    const int height = map.height();
-    std::vector<double> distance(
-        static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
-        kInfinity);
-
-    const int goal_x = static_cast<int>(std::floor(map.goal().x));
-    const int goal_y = static_cast<int>(std::floor(map.goal().y));
-    if (!inBounds(goal_x, goal_y, width, height)) {
+/**
+ * @brief 在图上运行Dijkstra算法计算到起点的最短距离
+ * @param[in] graph       邻接表表示的图
+ * @param[in] start_index 起点索引
+ * @return 每个节点到起点的最短距离数组
+ */
+std::vector<double> runGraphDijkstra(
+    const std::vector<std::vector<std::pair<int, double>>>& graph,
+    int start_index) {
+    std::vector<double> distance(graph.size(), kInfinity);
+    if (start_index < 0 || start_index >= static_cast<int>(graph.size())) {
         return distance;
     }
-
     using Entry = std::pair<double, int>;
     std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> open;
-    const int goal_index = indexOf(goal_x, goal_y, width);
-    distance[static_cast<std::size_t>(goal_index)] = 0.0;
-    open.push({0.0, goal_index});
-
-    const double straight_cost = std::max(1.0e-9, xy_resolution);
-    const double diagonal_cost = std::sqrt(2.0) * straight_cost;
-    const std::array<std::array<int, 3>, 8> neighbors = {{
-        {{1, 0, 0}}, {{-1, 0, 0}}, {{0, 1, 0}}, {{0, -1, 0}},
-        {{1, 1, 1}}, {{1, -1, 1}}, {{-1, 1, 1}}, {{-1, -1, 1}}
-    }};
+    distance[static_cast<std::size_t>(start_index)] = 0.0;
+    open.push({0.0, start_index});
 
     while (!open.empty()) {
-        const auto [current_distance, current_index] = open.top();
+        const auto [current_distance, current] = open.top();
         open.pop();
-        if (current_distance > distance[static_cast<std::size_t>(current_index)]) {
+        if (current_distance > distance[static_cast<std::size_t>(current)]) {
             continue;
         }
 
-        const int x = current_index % width;
-        const int y = current_index / width;
-        for (const auto& neighbor : neighbors) {
-            const int nx = x + neighbor[0];
-            const int ny = y + neighbor[1];
-            if (!inBounds(nx, ny, width, height)) {
-                continue;
-            }
-
-            const int next_index = indexOf(nx, ny, width);
-            if (blocked[static_cast<std::size_t>(next_index)] != 0
-                && next_index != goal_index) {
-                continue;
-            }
-
-            const double step_cost = neighbor[2] == 0
-                ? straight_cost
-                : diagonal_cost;
-            const double next_distance = current_distance + step_cost;
-            if (next_distance < distance[static_cast<std::size_t>(next_index)]) {
-                distance[static_cast<std::size_t>(next_index)] = next_distance;
-                open.push({next_distance, next_index});
+        for (const auto& [next, edge_cost] : graph[static_cast<std::size_t>(current)]) {
+            const double next_distance = current_distance + edge_cost;
+            if (next_distance < distance[static_cast<std::size_t>(next)]) {
+                distance[static_cast<std::size_t>(next)] = next_distance;
+                open.push({next_distance, next});
             }
         }
     }
@@ -152,26 +85,74 @@ std::vector<double> runReverseDijkstra(const GridMap& map,
     return distance;
 }
 
+/**
+ * @brief 检查单元格是否为障碍物或地图外区域
+ * @param[in] map 栅格地图
+ * @param[in] x   单元格x坐标
+ * @param[in] y   单元格y坐标
+ * @return true如果是障碍物或地图外
+ */
+bool cellObstacleOrBlockedOutside(const GridMap& map, int x, int y) {
+    return !map.inBounds(x, y) || map.isObstacle(x, y);
+}
+
+/**
+ * @brief 统计单元格周围的障碍物数量
+ * @param[in] map 栅格地图
+ * @param[in] x   单元格x坐标
+ * @param[in] y   单元格y坐标
+ * @return 四个角点中障碍物/边界点的数量
+ */
+int surroundingObstacleCount(const GridMap& map, int x, int y) {
+    int count = 0;
+    count += cellObstacleOrBlockedOutside(map, x - 1, y - 1) ? 1 : 0;
+    count += cellObstacleOrBlockedOutside(map, x, y - 1) ? 1 : 0;
+    count += cellObstacleOrBlockedOutside(map, x - 1, y) ? 1 : 0;
+    count += cellObstacleOrBlockedOutside(map, x, y) ? 1 : 0;
+    return count;
+}
+
 } // namespace
 
+/** @brief 基类prepare默认空实现。 */
 void Heuristic::prepare(const GridMap&, const Car&, const HybridAstarConfig&) {}
 
+/**
+ * @brief 准备欧几里得启发式
+ * @param[in] map 栅格地图
+ */
 void EuclideanHeuristic::prepare(const GridMap& map,
                                  const Car&,
                                  const HybridAstarConfig&) {
     goal_ = map.goal();
 }
 
+/**
+ * @brief 计算欧几里得距离估计
+ * @param[in] pose 当前位姿
+ * @return 到目标的欧几里得距离
+ */
 double EuclideanHeuristic::estimate(const CarPose& pose) const {
     const double dx = pose.x - goal_.x;
     const double dy = pose.y - goal_.y;
     return std::sqrt(dx * dx + dy * dy);
 }
 
+/** @brief 返回启发式名称。 */
 std::string EuclideanHeuristic::name() const {
     return "euclidean";
 }
 
+/**
+ * @brief 准备组合启发式
+ *
+ * 构建可视点图：提取位于障碍物边界上的网格点作为可视点，
+ * 在所有相互可视的点之间建立边，运行Dijkstra计算到目标的最短路径代价。
+ *
+ * @param[in] map    栅格地图
+ * @param[in] car    车辆模型
+ * @param[in] config 规划器配置
+ */
 void CombinedHeuristic::prepare(const GridMap& map,
                                 const Car& car,
                                 const HybridAstarConfig& config) {
@@ -184,71 +165,141 @@ void CombinedHeuristic::prepare(const GridMap& map,
     max_steer_ = car.maxSteer();
     obstacle_enabled_ = config.enable_obstacle_heuristic;
 
-    obstacle_distance_.clear();
+    // 重置可视点图数据
+    obstacle_cells_.clear();
+    visibility_points_.clear();
+    visibility_graph_.clear();
+    visibility_distance_to_goal_.clear();
+    visibility_goal_index_ = -1;
+
     if (obstacle_enabled_) {
-        const std::vector<std::uint8_t> inflated = makeInflatedObstacles(
-            map, car, config.obstacle_heuristic_inflate_alpha);
-        obstacle_distance_ = runReverseDijkstra(map, inflated, xy_resolution_);
+        // 收集所有障碍物单元格
+        for (int y = 0; y < height_; ++y) {
+            for (int x = 0; x < width_; ++x) {
+                if (map.isObstacle(x, y)) {
+                    obstacle_cells_.insert({x, y});
+                }
+            }
+        }
+
+        // 提取可视点：只有1个角点接触障碍物的网格角点
+        for (int y = 0; y <= height_; ++y) {
+            for (int x = 0; x <= width_; ++x) {
+                if (surroundingObstacleCount(map, x, y) == 1) {
+                    visibility_points_.push_back({
+                        .x = static_cast<double>(x),
+                        .y = static_cast<double>(y)
+                    });
+                }
+            }
+        }
+
+        // 将目标点添加到可视点列表末尾
+        visibility_goal_index_ = static_cast<int>(visibility_points_.size());
+        visibility_points_.push_back(goalPoint(goal_));
+
+        // 构建可视点之间的边
+        visibility_graph_.assign(visibility_points_.size(), {});
+        for (std::size_t i = 0; i < visibility_points_.size(); ++i) {
+            for (std::size_t j = i + 1; j < visibility_points_.size(); ++j) {
+                const Point2D from = visibility_points_[i];
+                const Point2D to = visibility_points_[j];
+
+                // 仅当两点间有直接视域时才添加边
+                if (!hasLineOfSight(from, to, obstacle_cells_)) {
+                    continue;
+                }
+                const double edge_cost = distance2d(from, to);
+                visibility_graph_[i].push_back({
+                    static_cast<int>(j),
+                    edge_cost
+                });
+                visibility_graph_[j].push_back({
+                    static_cast<int>(i),
+                    edge_cost
+                });
+            }
+        }
+
+        // 运行Dijkstra计算从目标点到所有可视点的最短距离
+        visibility_distance_to_goal_ =
+            runGraphDijkstra(visibility_graph_, visibility_goal_index_);
     }
 }
 
+/**
+ * @brief 计算组合启发式估计
+ * @param[in] pose 当前位姿
+ * @return max(非障碍物估计, 障碍物估计)
+ */
 double CombinedHeuristic::estimate(const CarPose& pose) const {
     const double non_obs = nonObstacleEstimate(pose);
     const double obs = obstacle_enabled_ ? obstacleEstimate(pose) : 0.0;
-
-    // debug("pose: (%.2f, %.2f, %.2f), non_obs: %.2f, obs: %.2f\n",
-    //       pose.x, pose.y, pose.theta, non_obs, obs);
-    // return non_obs;
     return std::max(non_obs, obs);
 }
 
+/** @brief 返回启发式名称。 */
 std::string CombinedHeuristic::name() const {
     return "combined";
 }
 
+/**
+ * @brief 欧几里得距离辅助函数
+ */
 double CombinedHeuristic::euclidean(const CarPose& pose) const {
     const double dx = pose.x - goal_.x;
     const double dy = pose.y - goal_.y;
     return std::sqrt(dx * dx + dy * dy);
 }
 
+/**
+ * @brief 使用可视点图计算障碍物启发式
+ * @param[in] pose 当前位姿
+ * @return 到目标的最短可视路径代价
+ *
+ * 如果当前点到目标有直接视域，返回欧几里得距离。
+ * 否则，通过可视点中转：找到所有与当前点有视域的可视点，
+ * 选择 distance(current, waypoint) + suffix(waypoint) 最小的组合。
+ */
 double CombinedHeuristic::obstacleEstimate(const CarPose& pose) const {
-    if (obstacle_distance_.empty()) {
+    if (visibility_points_.empty() || visibility_distance_to_goal_.empty()) {
         return euclidean(pose);
     }
 
-    const int x0 = static_cast<int>(std::floor(pose.x));
-    const int y0 = static_cast<int>(std::floor(pose.y));
-    const int x1 = x0 + 1;
-    const int y1 = y0 + 1;
-    if (!inBounds(x0, y0, width_, height_)
-        || !inBounds(x1, y0, width_, height_)
-        || !inBounds(x0, y1, width_, height_)
-        || !inBounds(x1, y1, width_, height_)) {
+    const Point2D current{.x = pose.x, .y = pose.y};
+    const Point2D goal = goalPoint(goal_);
+
+    // 直接可视则返回欧几里得距离
+    if (hasLineOfSight(current, goal, obstacle_cells_)) {
         return euclidean(pose);
     }
 
-    const double d00 = obstacle_distance_[static_cast<std::size_t>(
-        indexOf(x0, y0, width_))];
-    const double d10 = obstacle_distance_[static_cast<std::size_t>(
-        indexOf(x1, y0, width_))];
-    const double d01 = obstacle_distance_[static_cast<std::size_t>(
-        indexOf(x0, y1, width_))];
-    const double d11 = obstacle_distance_[static_cast<std::size_t>(
-        indexOf(x1, y1, width_))];
-    if (!std::isfinite(d00) || !std::isfinite(d10)
-        || !std::isfinite(d01) || !std::isfinite(d11)) {
-        return euclidean(pose);
+    // 通过可视点中转寻找最短路径
+    double best = kInfinity;
+    for (std::size_t i = 0; i < visibility_points_.size(); ++i) {
+        if (static_cast<int>(i) == visibility_goal_index_) {
+            continue;
+        }
+        const double suffix =
+            visibility_distance_to_goal_[static_cast<std::size_t>(i)];
+        if (!std::isfinite(suffix)) {
+            continue;
+        }
+        const Point2D waypoint = visibility_points_[i];
+        if (!hasLineOfSight(current, waypoint, obstacle_cells_)) {
+            continue;
+        }
+        best = std::min(best, distance2d(current, waypoint) + suffix);
     }
 
-    const double tx = pose.x - static_cast<double>(x0);
-    const double ty = pose.y - static_cast<double>(y0);
-    return (1.0 - tx) * (1.0 - ty) * d00
-        + tx * (1.0 - ty) * d10
-        + (1.0 - tx) * ty * d01
-        + tx * ty * d11;
+    return std::isfinite(best) ? best : euclidean(pose);
 }
 
+/**
+ * @brief 非障碍物启发式：使用Reeds-Shepp距离
+ * @param[in] pose 当前位姿
+ * @return Reeds-Shepp风格的无障碍最短距离估计
+ */
 double CombinedHeuristic::nonObstacleEstimate(const CarPose& pose) const {
     const ReedsSheppGenerator generator(
         min_turning_radius_, reeds_shepp_sample_step_, max_steer_);

@@ -64,10 +64,8 @@ double firstGridBoundary(double coordinate, int step) {
  * 执行线性搜索以避免单元格列表中的重复。
  */
 void appendUnique(std::vector<HashCell>& cells, HashCell cell) {
-    for (const HashCell& existing : cells) {
-        if (existing == cell) {
-            return;
-        }
+    if (!cells.empty() && cells.back() == cell) {
+        return;
     }
     cells.push_back(cell);
 }
