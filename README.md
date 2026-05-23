@@ -136,7 +136,6 @@ hybrid_astar:
   analytic_expansion_interval: 25
   collision_safety_margin: 0.0
   enable_obstacle_heuristic: true
-  obstacle_heuristic_inflate_alpha: 1.0
   debug: true
   debug_progress_interval: 500
 ```

@@ -28,7 +28,6 @@ hybrid_astar:
   analytic_expansion_interval: 25       # 搜索中每隔多少次扩展尝试一次解析直连。
   collision_safety_margin: 0.0          # 碰撞检测时对车辆外轮廓额外外扩的安全距离。
   enable_obstacle_heuristic: true       # 是否启用考虑障碍物的启发式代价。
-  obstacle_heuristic_inflate_alpha: 1.0 # 障碍物启发式膨胀系数，越大越倾向远离障碍物。
   obstacle_lookup_resolution: 1         # 障碍物启发式查表分辨率，越小越精细但预计算越慢。
   debug: true                           # 是否输出规划阶段和搜索进度调试信息。
   debug_progress_interval: 500          # debug 开启时，每隔多少次迭代输出一次搜索进度。

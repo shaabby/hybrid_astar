@@ -181,7 +181,6 @@ final/
 - `analytic_expansion_interval`：每隔多少次扩展尝试一次解析扩展。
 - `collision_safety_margin`：碰撞检测安全外扩距离。
 - `enable_obstacle_heuristic`：是否启用障碍物启发式。
-- `obstacle_heuristic_inflate_alpha`：障碍物启发式膨胀系数。
 - `debug` 与 `debug_progress_interval`：调试输出相关参数。
 
 `HybridAstar` 是核心规划器。它在 \((x, y, \theta)\) 三维状态空间中搜索路径。与普通 A* 不同，它的节点扩展由车辆运动模型产生，每个子节点对应一段连续的车辆轨迹。
@@ -420,7 +419,6 @@ hybrid_astar:
   analytic_expansion_interval: 25
   collision_safety_margin: 0.0
   enable_obstacle_heuristic: true
-  obstacle_heuristic_inflate_alpha: 1.0
   debug: true
   debug_progress_interval: 500
 ```
@@ -576,7 +574,6 @@ hybrid_astar:
   analytic_expansion_interval: 25
   collision_safety_margin: 0.0
   enable_obstacle_heuristic: true
-  obstacle_heuristic_inflate_alpha: 1.0
   obstacle_lookup_resolution: 0.1
   debug: true
   debug_progress_interval: 500

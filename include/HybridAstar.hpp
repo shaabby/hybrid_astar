@@ -37,7 +37,6 @@ struct HybridAstarConfig {
     int analytic_expansion_interval;   ///< 每隔多少次扩展尝试一次直连
     double collision_safety_margin;    ///< 车辆footprint碰撞检测安全外扩
     bool enable_obstacle_heuristic;    ///< 是否启用障碍物启发式
-    double obstacle_heuristic_inflate_alpha; ///< 障碍物启发式膨胀系数
     double obstacle_lookup_resolution;  ///< 障碍物启发式查表分辨率
     bool debug;                        ///< 是否输出运行阶段调试信息
     int debug_progress_interval;       ///< 搜索循环调试输出间隔

@@ -105,7 +105,6 @@ void writeHeader(std::ofstream& output) {
         << "steer_change_penalty,"
         << "heuristic_name,"
         << "enable_obstacle_heuristic,"
-        << "obstacle_heuristic_inflate_alpha,"
         << "enable_analytic_expansion\n";
 }
 
@@ -165,7 +164,6 @@ void ExperimentLogger::appendCsv(const std::filesystem::path& path,
            << config.steer_change_penalty << ','
            << csvEscape(entry.heuristic_name) << ','
            << (config.enable_obstacle_heuristic ? 1 : 0) << ','
-           << config.obstacle_heuristic_inflate_alpha << ','
            << (config.enable_analytic_expansion ? 1 : 0)
            << '\n';
 }
