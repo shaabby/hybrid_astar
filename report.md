@@ -544,6 +544,49 @@ app_config_test
 4. 不同参数对搜索速度和结果影响较大，因此增加了 YAML 配置和 CSV 实验记录，便于多次运行后比较结果。
 5. 车辆碰撞检测不能只检查后轴中心所在栅格，而必须检查车身矩形 footprint。项目通过 `bodyCorners` 和矩形覆盖栅格检测提高了碰撞检测真实性。
 
+### 5.8 实验日志：高角度分辨率导致原地转圈
+
+本次实验使用 `map/default_map.json` 作为地图输入，并采用较高的航向角去重精度。实验配置如下：
+
+```yaml
+map_path: map/default_map.json
+
+vehicle:
+  length: 4.5
+  width: 2.0
+  wheelbase: 2.7
+  rear_to_center: 1.35
+  max_steer: 0.61
+
+hybrid_astar:
+  xy_resolution: 1.0
+  theta_bins: 360
+  step_size: 0.2
+  primitive_length: 1.2
+  goal_xy_tolerance: 0.2
+  goal_theta_tolerance: 0.05
+  reverse_penalty: 2.0
+  steer_penalty: 1.0
+  gear_switch_penalty: 1.0
+  steer_change_penalty: 1.0
+  max_iterations: 1200000
+  allow_reverse: true
+  enable_analytic_expansion: true
+  analytic_expansion_distance: 8
+  analytic_expansion_interval: 25
+  collision_safety_margin: 0.0
+  enable_obstacle_heuristic: true
+  obstacle_heuristic_inflate_alpha: 1.0
+  obstacle_lookup_resolution: 0.1
+  debug: true
+  debug_progress_interval: 500
+```
+
+实验现象是：当 `theta_bins` 设置为 `360` 时，航向角离散粒度非常细。搜索去重时，同一位置附近只要朝向角落入不同角度分箱，就会被视为不同状态继续扩展。这会显著放大状态空间，并且在狭窄或启发式约束不够强的区域中，车辆容易反复尝试小角度调整，表现为局部转圈或原地打转。
+
+关键结论是：本次转圈现象的主要原因不是车辆运动模型错误，而是 `theta_bins: 360` 使闭集去重过细，导致大量近似重复的姿态状态没有被合并。后续调参时可以适当降低 `theta_bins`，或增大 `xy_resolution`、`primitive_length`、转向变化惩罚等参数，以减少局部重复搜索。
+![alt text](image.png)
+
 ---
 
 ## 6. 学习心得和收获

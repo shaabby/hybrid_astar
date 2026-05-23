@@ -39,6 +39,23 @@ struct Node {
     std::vector<CarPose> segment; ///< 从父节点运动到本节点的连续轨迹
 };
 
+struct StateKey {
+    int x_index = 0;
+    int y_index = 0;
+    int theta_index = 0;
+
+    bool operator==(const StateKey& other) const = default;
+};
+
+struct StateKeyHash {
+    std::size_t operator()(const StateKey& key) const {
+        std::size_t seed = std::hash<int>{}(key.x_index);
+        seed ^= std::hash<int>{}(key.y_index) + 0x9e3779b9U + (seed << 6) + (seed >> 2);
+        seed ^= std::hash<int>{}(key.theta_index) + 0x9e3779b9U + (seed << 6) + (seed >> 2);
+        return seed;
+    }
+};
+
 /**
  * @brief 优先队列（open set）条目。
  *
@@ -104,15 +121,12 @@ int thetaIndex(double theta, int bins) {
     return std::max(0, index);
 }
 
-/**
- * @brief 将三个离散索引编码为一个 64 位整数，用于 closed set 和 best_g 的键。
- *
- * 使用位运算保证 (x, y, theta) 组合的唯一性。
- */
-std::int64_t makeKey(int x_index, int y_index, int theta_index) {
-    return (static_cast<std::int64_t>(x_index) << 40)
-        ^ (static_cast<std::int64_t>(y_index) << 20)
-        ^ static_cast<std::int64_t>(theta_index);
+StateKey makeKey(const Node& node) {
+    return {
+        .x_index = node.x_index,
+        .y_index = node.y_index,
+        .theta_index = node.theta_index
+    };
 }
 
 /**
@@ -342,9 +356,9 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     std::priority_queue<OpenEntry> open;
     open.push({start_node.f, 0});
 
-    std::unordered_map<std::int64_t, double> best_g;
-    std::unordered_set<std::int64_t> closed;
-    best_g[makeKey(start_node.x_index, start_node.y_index, start_node.theta_index)] = 0.0;
+    std::unordered_map<StateKey, double, StateKeyHash> best_g;
+    std::unordered_set<StateKey, StateKeyHash> closed;
+    best_g[makeKey(start_node)] = 0.0;
     if (config_.debug) {
         std::cerr << "[debug] planner: start node ready"
                   << " h=" << start_node.h
@@ -382,8 +396,13 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
 
         const int current_id = current_entry.node_id;
         const Node current = nodes[current_id];
-        const std::int64_t current_key = makeKey(
-            current.x_index, current.y_index, current.theta_index);
+        const StateKey current_key = makeKey(current);
+
+        const auto current_best = best_g.find(current_key);
+        if (current_best != best_g.end()
+            && current.g > current_best->second + 1.0e-9) {
+            continue;
+        }
 
         // 跳过已关闭的节点（优先队列中可能存在过期条目）
         if (closed.contains(current_key)) {
@@ -511,8 +530,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                                               config_);
 
                 // 5.4 去重：检查 closed set 和 best_g
-                const std::int64_t next_key = makeKey(
-                    next.x_index, next.y_index, next.theta_index);
+                const StateKey next_key = makeKey(next);
                 if (closed.contains(next_key)) {
                     continue;
                 }
