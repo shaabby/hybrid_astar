@@ -503,8 +503,14 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                     continue; // 碰撞或没有移动，放弃该分支
                 }
 
-                // 5.2 构造子节点
-                Node next = makeNode(pose, config_, heuristic);
+                // 5.2 构造子节点。h/f 在 computeCost 中统一计算，避免热循环内重复评估启发式。
+                Node next;
+                next.pose = pose;
+                next.x_index = static_cast<int>(
+                    std::floor(pose.x / config_.xy_resolution));
+                next.y_index = static_cast<int>(
+                    std::floor(pose.y / config_.xy_resolution));
+                next.theta_index = thetaIndex(pose.theta, config_.theta_bins);
                 next.parent = current_id;
                 next.segment = std::move(segment);
 

@@ -8,6 +8,7 @@
 
 #include "LineOfSight.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -105,13 +106,6 @@ int startCellIndex(double coordinate, int step, double eps) {
     return floorToCell(coordinate);
 }
 
-int endCellIndex(double coordinate, int step, double eps) {
-    if (step > 0 && onGridLine(coordinate, eps)) {
-        return floorToCell(coordinate) - 1;
-    }
-    return floorToCell(coordinate);
-}
-
 double firstGridBoundary(double coordinate, int step, double eps) {
     if (step > 0) {
         return static_cast<double>(std::floor(coordinate) + 1);
@@ -166,8 +160,6 @@ std::vector<HashCell> supercoverDdaCells(Point2D a, Point2D b, double eps) {
 
     int x = startCellIndex(a.x, step_x, eps);
     int y = startCellIndex(a.y, step_y, eps);
-    const int end_x = endCellIndex(b.x, step_x, eps);
-    const int end_y = endCellIndex(b.y, step_y, eps);
     appendCellsForDirectedPoint(cells, a, step_x, step_y, false, eps);
 
     const bool horizontal_on_grid_line = step_y == 0 && onGridLine(a.y, eps);
@@ -191,7 +183,7 @@ std::vector<HashCell> supercoverDdaCells(Point2D a, Point2D b, double eps) {
         t_max_y = 0.0;
     }
 
-    while (x != end_x || y != end_y) {
+    while (std::min(t_max_x, t_max_y) < 1.0 - eps) {
         if (t_max_x < t_max_y - eps) {
             x += step_x;
             t_max_x += t_delta_x;
