@@ -177,7 +177,7 @@ bool writeOutputFile(const std::string& output_path,
     out << "{\n";
     out << "  \"version\": 1,\n";
     out << "  \"map\": {\n";
-    out << "    \"source\": \"map/empty.json\",\n";
+    out << "    \"source\": \"map/empty01.json\",\n";
     out << "    \"width\": " << map.width() << ",\n";
     out << "    \"height\": " << map.height() << ",\n";
     out << "    \"obstacle_count\": " << map.obstacleCount() << "\n";
@@ -222,7 +222,7 @@ bool checkGeneratedPath(const std::string& name,
     ok &= expect(samplesAreFinite(*path), name + " samples should be finite");
     ok &= expect(reachesGoal(*path, goal), name + " should reach the goal");
     ok &= expect(collision_checker.isCollisionFree(*path),
-                 name + " should be collision-free on map/empty.json");
+                 name + " should be collision-free on map/empty01.json");
 
     const std::optional<double> estimated =
         generator.estimateDistance(start, goal);
@@ -241,7 +241,7 @@ bool checkGeneratedPath(const std::string& name,
 int main() {
     try {
         const std::string map_path =
-            std::string(HYBRID_ASTAR_SOURCE_DIR) + "/map/empty.json";
+            std::string(HYBRID_ASTAR_SOURCE_DIR) + "/map/empty01.json";
         const std::string output_path =
             std::string(HYBRID_ASTAR_SOURCE_DIR)
             + "/output/reeds_shepp_empty_map_test.json";
@@ -259,11 +259,11 @@ int main() {
             car.minTurningRadius(), kSampleStep, car.maxSteer());
 
         bool ok = true;
-        ok &= expect(!map.empty(), "map/empty.json should load");
+        ok &= expect(!map.empty(), "map/empty01.json should load");
         ok &= expect(map.width() == 60 && map.height() == 36,
-                     "map/empty.json should keep its expected dimensions");
+                     "map/empty01.json should keep its expected dimensions");
         ok &= expect(map.obstacleCount() > 0,
-                     "map/empty.json should keep boundary obstacles");
+                     "map/empty01.json should keep boundary obstacles");
         ok &= expect(!vehicle_checker.collides(carPose(map.start())),
                      "start pose should not collide");
         ok &= expect(!vehicle_checker.collides(carPose(map.goal())),

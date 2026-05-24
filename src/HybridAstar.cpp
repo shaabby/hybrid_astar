@@ -40,6 +40,9 @@ void copyHeuristicTiming(TimingBreakdown& timing, const Heuristic& heuristic) {
     timing.visibility_graph_ms = heuristic_timing.visibility_graph_ms;
     timing.visibility_dijkstra_ms = heuristic_timing.visibility_dijkstra_ms;
     timing.obstacle_lookup_ms = heuristic_timing.obstacle_lookup_ms;
+    timing.reverse_dijkstra_inflation_ms =
+        heuristic_timing.reverse_dijkstra_inflation_ms;
+    timing.reverse_dijkstra_ms = heuristic_timing.reverse_dijkstra_ms;
     timing.non_obstacle_heuristic_ms = heuristic_timing.non_obstacle_heuristic_ms;
     timing.obstacle_heuristic_ms = heuristic_timing.obstacle_heuristic_ms;
     timing.heuristic_estimate_calls = heuristic_timing.heuristic_estimate_calls;

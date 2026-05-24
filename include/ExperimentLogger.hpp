@@ -35,6 +35,8 @@ struct ExperimentLogEntry {
     double visibility_graph_ms = 0.0;
     double visibility_dijkstra_ms = 0.0;
     double obstacle_lookup_ms = 0.0;
+    double reverse_dijkstra_inflation_ms = 0.0;
+    double reverse_dijkstra_ms = 0.0;
     double non_obstacle_heuristic_ms = 0.0;
     double obstacle_heuristic_ms = 0.0;
     std::size_t heuristic_estimate_calls = 0;

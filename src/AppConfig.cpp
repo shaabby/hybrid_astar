@@ -141,6 +141,23 @@ bool parseBool(const ParsedLine& line) {
     throw std::runtime_error(linePrefix(line) + " expects a bool");
 }
 
+ObstacleHeuristicType parseObstacleHeuristicType(const ParsedLine& line) {
+    std::string value = unquote(line.value);
+    std::ranges::transform(value, value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    if (value == "visibility_graph") {
+        return ObstacleHeuristicType::VisibilityGraph;
+    }
+    if (value == "reverse_dijkstra") {
+        return ObstacleHeuristicType::ReverseDijkstra;
+    }
+    throw std::runtime_error(
+        linePrefix(line)
+        + " expects visibility_graph or reverse_dijkstra");
+}
+
 void requireFields(const std::unordered_set<std::string>& seen,
                    std::initializer_list<std::string_view> required,
                    std::string_view prefix) {
@@ -249,6 +266,10 @@ void applyHybridAstar(HybridAstarConfig& config, const ParsedLine& line) {
         config.enable_obstacle_heuristic = parseBool(line);
     } else if (line.key == "obstacle_lookup_resolution") {
         config.obstacle_lookup_resolution = parseDouble(line);
+    } else if (line.key == "obstacle_heuristic_type") {
+        config.obstacle_heuristic_type = parseObstacleHeuristicType(line);
+    } else if (line.key == "obstacle_heuristic_inflation_alpha") {
+        config.obstacle_heuristic_inflation_alpha = parseDouble(line);
     } else if (line.key == "enable_timing") {
         config.enable_timing = parseBool(line);
     } else if (line.key == "debug") {

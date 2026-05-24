@@ -119,7 +119,6 @@ add_executable(hybrid_astar_testbench
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ExperimentLogger.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/GridMap.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Heuristic.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/HtmlWriter.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/HybridAstar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/JsonExporter.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/LineOfSight.cpp"

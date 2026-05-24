@@ -18,6 +18,7 @@
 #include <vector>
 
 struct HybridAstarConfig;
+enum class ObstacleHeuristicType;
 
 struct HeuristicTiming {
     double obstacle_collect_ms = 0.0;
@@ -25,6 +26,8 @@ struct HeuristicTiming {
     double visibility_graph_ms = 0.0;
     double visibility_dijkstra_ms = 0.0;
     double obstacle_lookup_ms = 0.0;
+    double reverse_dijkstra_inflation_ms = 0.0;
+    double reverse_dijkstra_ms = 0.0;
     double non_obstacle_heuristic_ms = 0.0;
     double obstacle_heuristic_ms = 0.0;
     std::size_t heuristic_estimate_calls = 0;
@@ -85,6 +88,8 @@ public:
 private:
     [[nodiscard]] double euclidean(const CarPose& pose) const;
     [[nodiscard]] double obstacleEstimate(const CarPose& pose) const;
+    [[nodiscard]] double visibilityGraphObstacleEstimate(const CarPose& pose) const;
+    [[nodiscard]] double reverseDijkstraObstacleEstimate(const CarPose& pose) const;
     [[nodiscard]] double obstacleEstimateAt(Point2D current) const;
     [[nodiscard]] double nonObstacleEstimate(const CarPose& pose) const;
     void buildObstacleLookup();
@@ -100,6 +105,9 @@ private:
     bool debug_enabled_ = false;
     bool timing_enabled_ = false;
     mutable HeuristicTiming timing_;
+    ObstacleHeuristicType obstacle_heuristic_type_;
+    double obstacle_heuristic_inflation_alpha_ = 1.0;
+    std::vector<double> reverse_dijkstra_distance_;
     ObstacleSet obstacle_cells_;
     std::vector<Point2D> visibility_points_;
     std::vector<std::vector<std::pair<int, double>>> visibility_graph_;

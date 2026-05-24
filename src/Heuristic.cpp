@@ -12,6 +12,7 @@
 #include "ReedsShepp.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -66,6 +67,135 @@ using Clock = std::chrono::steady_clock;
 
 double elapsedMs(Clock::time_point start, Clock::time_point end) {
     return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+int indexOf(int x, int y, int width) {
+    return y * width + x;
+}
+
+bool inGridBounds(int x, int y, int width, int height) {
+    return x >= 0 && x < width && y >= 0 && y < height;
+}
+
+bool withinInflationRadius(int candidate_x,
+                           int candidate_y,
+                           int obstacle_x,
+                           int obstacle_y,
+                           double radius) {
+    const double center_x = static_cast<double>(candidate_x) + 0.5;
+    const double center_y = static_cast<double>(candidate_y) + 0.5;
+    const double obstacle_left = static_cast<double>(obstacle_x);
+    const double obstacle_right = obstacle_left + 1.0;
+    const double obstacle_bottom = static_cast<double>(obstacle_y);
+    const double obstacle_top = obstacle_bottom + 1.0;
+
+    const double dx = std::max({
+        obstacle_left - center_x,
+        0.0,
+        center_x - obstacle_right
+    });
+    const double dy = std::max({
+        obstacle_bottom - center_y,
+        0.0,
+        center_y - obstacle_top
+    });
+    return dx * dx + dy * dy <= radius * radius;
+}
+
+std::vector<std::uint8_t> makeInflatedObstacles(const GridMap& map,
+                                                const Car& car,
+                                                double inflate_alpha) {
+    const int width = map.width();
+    const int height = map.height();
+    std::vector<std::uint8_t> inflated(
+        static_cast<std::size_t>(width * height), 0);
+
+    const double radius = std::max(0.0, inflate_alpha) * car.width() * 0.5;
+    const int cell_radius = static_cast<int>(std::ceil(radius));
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (!map.isObstacle(x, y)) {
+                continue;
+            }
+            for (int yy = y - cell_radius; yy <= y + cell_radius; ++yy) {
+                for (int xx = x - cell_radius; xx <= x + cell_radius; ++xx) {
+                    if (!inGridBounds(xx, yy, width, height)) {
+                        continue;
+                    }
+                    if (withinInflationRadius(xx, yy, x, y, radius)) {
+                        inflated[static_cast<std::size_t>(
+                            indexOf(xx, yy, width))] = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    return inflated;
+}
+
+std::vector<double> runReverseDijkstra(const GridMap& map,
+                                       const std::vector<std::uint8_t>& blocked,
+                                       double xy_resolution) {
+    const int width = map.width();
+    const int height = map.height();
+    std::vector<double> distance(
+        static_cast<std::size_t>(width * height), kInfinity);
+
+    const int goal_x = static_cast<int>(std::floor(map.goal().x));
+    const int goal_y = static_cast<int>(std::floor(map.goal().y));
+    if (!inGridBounds(goal_x, goal_y, width, height)) {
+        return distance;
+    }
+
+    using Entry = std::pair<double, int>;
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> open;
+    const int goal_index = indexOf(goal_x, goal_y, width);
+    distance[static_cast<std::size_t>(goal_index)] = 0.0;
+    open.push({0.0, goal_index});
+
+    const double straight_cost = std::max(1.0e-9, xy_resolution);
+    const double diagonal_cost = std::sqrt(2.0) * straight_cost;
+    const std::array<std::array<int, 3>, 8> neighbors = {{
+        {{1, 0, 0}}, {{-1, 0, 0}}, {{0, 1, 0}}, {{0, -1, 0}},
+        {{1, 1, 1}}, {{1, -1, 1}}, {{-1, 1, 1}}, {{-1, -1, 1}}
+    }};
+
+    while (!open.empty()) {
+        const auto [current_distance, current_index] = open.top();
+        open.pop();
+        if (current_distance > distance[static_cast<std::size_t>(current_index)]) {
+            continue;
+        }
+
+        const int x = current_index % width;
+        const int y = current_index / width;
+        for (const auto& neighbor : neighbors) {
+            const int nx = x + neighbor[0];
+            const int ny = y + neighbor[1];
+            if (!inGridBounds(nx, ny, width, height)) {
+                continue;
+            }
+
+            const int next_index = indexOf(nx, ny, width);
+            if (blocked[static_cast<std::size_t>(next_index)] != 0
+                && next_index != goal_index) {
+                continue;
+            }
+
+            const double step_cost = neighbor[2] == 0
+                ? straight_cost
+                : diagonal_cost;
+            const double next_distance = current_distance + step_cost;
+            if (next_distance < distance[static_cast<std::size_t>(next_index)]) {
+                distance[static_cast<std::size_t>(next_index)] = next_distance;
+                open.push({next_distance, next_index});
+            }
+        }
+    }
+
+    return distance;
 }
 
 /**
@@ -196,6 +326,8 @@ void CombinedHeuristic::prepare(const GridMap& map,
     reeds_shepp_sample_step_ = config.step_size;
     max_steer_ = car.maxSteer();
     obstacle_enabled_ = config.enable_obstacle_heuristic;
+    obstacle_heuristic_type_ = config.obstacle_heuristic_type;
+    obstacle_heuristic_inflation_alpha_ = config.obstacle_heuristic_inflation_alpha;
     debug_enabled_ = config.debug;
     timing_enabled_ = config.enable_timing;
     timing_ = HeuristicTiming{};
@@ -206,6 +338,7 @@ void CombinedHeuristic::prepare(const GridMap& map,
     visibility_graph_.clear();
     visibility_distance_to_goal_.clear();
     obstacle_lookup_.clear();
+    reverse_dijkstra_distance_.clear();
     visibility_goal_index_ = -1;
     obstacle_lookup_width_ = 0;
     obstacle_lookup_height_ = 0;
@@ -213,10 +346,42 @@ void CombinedHeuristic::prepare(const GridMap& map,
         1.0e-9, config.obstacle_lookup_resolution);
 
     if (obstacle_enabled_) {
-        if (config.debug) {
-            std::cerr << "[debug] heuristic: collect obstacle cells\n";
-        }
-        Clock::time_point obstacle_collect_start;
+        if (obstacle_heuristic_type_ == ObstacleHeuristicType::ReverseDijkstra) {
+            if (config.debug) {
+                std::cerr << "[debug] heuristic: build inflated obstacles\n";
+            }
+            Clock::time_point inflation_start;
+            if (timing_enabled_) {
+                inflation_start = Clock::now();
+            }
+            const std::vector<std::uint8_t> inflated = makeInflatedObstacles(
+                map, car, obstacle_heuristic_inflation_alpha_);
+            if (timing_enabled_) {
+                timing_.reverse_dijkstra_inflation_ms += elapsedMs(
+                    inflation_start, Clock::now());
+            }
+
+            if (config.debug) {
+                std::cerr << "[debug] heuristic: run reverse Dijkstra\n";
+            }
+            Clock::time_point reverse_dijkstra_start;
+            if (timing_enabled_) {
+                reverse_dijkstra_start = Clock::now();
+            }
+            reverse_dijkstra_distance_ = runReverseDijkstra(
+                map, inflated, xy_resolution_);
+            if (timing_enabled_) {
+                timing_.reverse_dijkstra_ms += elapsedMs(
+                    reverse_dijkstra_start, Clock::now());
+            }
+            if (config.debug) {
+                std::cerr << "[debug] heuristic: reverse Dijkstra complete\n";
+            }
+        } else {
+            if (config.debug) {
+                std::cerr << "[debug] heuristic: collect obstacle cells\n";
+            }
+            Clock::time_point obstacle_collect_start;
         if (timing_enabled_) {
             obstacle_collect_start = Clock::now();
         }
@@ -343,6 +508,7 @@ void CombinedHeuristic::prepare(const GridMap& map,
             std::cerr << "[debug] heuristic: obstacle lookup="
                       << obstacle_lookup_width_ << "x"
                       << obstacle_lookup_height_ << '\n';
+        }
         }
     } else if (config.debug) {
         std::cerr << "[debug] heuristic: obstacle heuristic disabled\n";
@@ -473,12 +639,38 @@ void CombinedHeuristic::buildObstacleLookup() {
     }
 }
 
+double CombinedHeuristic::obstacleEstimate(const CarPose& pose) const {
+    if (obstacle_heuristic_type_ == ObstacleHeuristicType::ReverseDijkstra) {
+        return reverseDijkstraObstacleEstimate(pose);
+    }
+    return visibilityGraphObstacleEstimate(pose);
+}
+
+/**
+ * @brief 使用反向Dijkstra距离图获取障碍物启发式
+ */
+double CombinedHeuristic::reverseDijkstraObstacleEstimate(const CarPose& pose) const {
+    if (reverse_dijkstra_distance_.empty()) {
+        return euclidean(pose);
+    }
+
+    const int x = static_cast<int>(std::floor(pose.x));
+    const int y = static_cast<int>(std::floor(pose.y));
+    if (!inGridBounds(x, y, width_, height_)) {
+        return euclidean(pose);
+    }
+
+    const double distance = reverse_dijkstra_distance_[static_cast<std::size_t>(
+        indexOf(x, y, width_))];
+    return std::isfinite(distance) ? distance : euclidean(pose);
+}
+
 /**
  * @brief 使用预计算查表结果获取障碍物启发式
  * @param[in] pose 当前位姿
  * @return 到目标的最短可视路径代价
  */
-double CombinedHeuristic::obstacleEstimate(const CarPose& pose) const {
+double CombinedHeuristic::visibilityGraphObstacleEstimate(const CarPose& pose) const {
     if (obstacle_lookup_.empty()
         || obstacle_lookup_width_ <= 0
         || obstacle_lookup_height_ <= 0) {

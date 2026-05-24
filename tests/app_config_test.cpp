@@ -90,6 +90,8 @@ hybrid_astar:
   collision_safety_margin: 0.05
   enable_obstacle_heuristic: true
   obstacle_lookup_resolution: 0.25
+  obstacle_heuristic_type: reverse_dijkstra
+  obstacle_heuristic_inflation_alpha: 0.75
   enable_timing: yes
   debug: no
   debug_progress_interval: 7
@@ -122,10 +124,59 @@ hybrid_astar:
                   "hybrid_astar.enable_analytic_expansion should parse 0");
     runner.expect(near(config.hybrid_astar.obstacle_lookup_resolution, 0.25),
                   "hybrid_astar.obstacle_lookup_resolution should load");
+    runner.expect(config.hybrid_astar.obstacle_heuristic_type
+                      == ObstacleHeuristicType::ReverseDijkstra,
+                  "hybrid_astar.obstacle_heuristic_type should load");
+    runner.expect(near(config.hybrid_astar.obstacle_heuristic_inflation_alpha, 0.75),
+                  "hybrid_astar.obstacle_heuristic_inflation_alpha should load");
     runner.expect(config.hybrid_astar.enable_timing,
                   "hybrid_astar.enable_timing should parse yes");
     runner.expect(!config.hybrid_astar.debug,
                   "hybrid_astar.debug should parse no");
+}
+
+void testDefaultObstacleHeuristicFields(TestRunner& runner) {
+    const std::filesystem::path path = writeConfig(
+        "hybrid_astar_app_config_default_obstacle_heuristic.yaml",
+        R"(map_path: map/simple01.json
+
+vehicle:
+  length: 4.7
+  width: 2.1
+  wheelbase: 2.8
+  rear_to_center: 1.4
+  max_steer: 0.7
+
+hybrid_astar:
+  xy_resolution: 0.5
+  theta_bins: 180
+  step_size: 0.1
+  primitive_length: 1.0
+  goal_xy_tolerance: 0.8
+  goal_theta_tolerance: 0.15
+  reverse_penalty: 1.5
+  steer_penalty: 0.2
+  gear_switch_penalty: 2.0
+  steer_change_penalty: 0.3
+  max_iterations: 42
+  allow_reverse: yes
+  enable_analytic_expansion: 0
+  analytic_expansion_distance: 10.5
+  analytic_expansion_interval: 3
+  collision_safety_margin: 0.05
+  enable_obstacle_heuristic: true
+  obstacle_lookup_resolution: 0.25
+  enable_timing: yes
+  debug: no
+  debug_progress_interval: 7
+)");
+
+    const AppConfig config = AppConfigLoader::loadYaml(path.string());
+    runner.expect(config.hybrid_astar.obstacle_heuristic_type
+                      == ObstacleHeuristicType::VisibilityGraph,
+                  "hybrid_astar.obstacle_heuristic_type should default");
+    runner.expect(near(config.hybrid_astar.obstacle_heuristic_inflation_alpha, 1.0),
+                  "hybrid_astar.obstacle_heuristic_inflation_alpha should default");
 }
 
 void expectThrows(TestRunner& runner,
@@ -170,6 +221,10 @@ vehicle:
                  "hybrid_astar_app_config_bad_type.yaml",
                  "map_path: map/default_map.json\nhybrid_astar:\n  theta_bins: x\n",
                  "bad type should throw");
+    expectThrows(runner,
+                 "hybrid_astar_app_config_bad_obstacle_heuristic_type.yaml",
+                 "map_path: map/default_map.json\nhybrid_astar:\n  obstacle_heuristic_type: nope\n",
+                 "bad obstacle heuristic type should throw");
 }
 
 } // namespace
@@ -177,6 +232,7 @@ vehicle:
 int main() {
     TestRunner runner;
     testLoadsFields(runner);
+    testDefaultObstacleHeuristicFields(runner);
     testErrors(runner);
     return runner.result();
 }

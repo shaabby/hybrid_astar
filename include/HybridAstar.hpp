@@ -16,6 +16,11 @@
 
 class Heuristic;
 
+enum class ObstacleHeuristicType {
+    VisibilityGraph,
+    ReverseDijkstra
+};
+
 /**
  * @brief Hybrid A* 规划器配置参数
  */
@@ -38,6 +43,9 @@ struct HybridAstarConfig {
     double collision_safety_margin;    ///< 车辆footprint碰撞检测安全外扩
     bool enable_obstacle_heuristic;    ///< 是否启用障碍物启发式
     double obstacle_lookup_resolution;  ///< 障碍物启发式查表分辨率
+    ObstacleHeuristicType obstacle_heuristic_type =
+        ObstacleHeuristicType::VisibilityGraph;
+    double obstacle_heuristic_inflation_alpha = 1.0;
     bool enable_timing;                 ///< 是否启用细分计时统计
     bool debug;                        ///< 是否输出运行阶段调试信息
     int debug_progress_interval;       ///< 搜索循环调试输出间隔
@@ -51,6 +59,8 @@ struct TimingBreakdown {
     double visibility_graph_ms = 0.0;
     double visibility_dijkstra_ms = 0.0;
     double obstacle_lookup_ms = 0.0;
+    double reverse_dijkstra_inflation_ms = 0.0;
+    double reverse_dijkstra_ms = 0.0;
     double non_obstacle_heuristic_ms = 0.0;
     double obstacle_heuristic_ms = 0.0;
     std::size_t heuristic_estimate_calls = 0;

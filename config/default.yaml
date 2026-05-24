@@ -29,6 +29,8 @@ hybrid_astar:
   collision_safety_margin: 0.0          # 碰撞检测时对车辆外轮廓额外外扩的安全距离。
   enable_obstacle_heuristic: true       # 是否启用考虑障碍物的启发式代价。
   obstacle_lookup_resolution: 1         # 障碍物启发式查表分辨率，越小越精细但预计算越慢。
+  obstacle_heuristic_type: visibility_graph # 障碍物启发式算法：visibility_graph 或 reverse_dijkstra。
+  obstacle_heuristic_inflation_alpha: 1.0 # reverse_dijkstra 障碍物膨胀系数，1 表示车辆半宽。
   enable_timing: true                    # 是否启用细分计时统计。
   debug: true                           # 是否输出规划阶段和搜索进度调试信息。
   debug_progress_interval: 5000          # debug 开启时，每隔多少次迭代输出一次搜索进度。

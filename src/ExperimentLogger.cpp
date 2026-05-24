@@ -70,6 +70,16 @@ std::string csvEscape(const std::string& value) {
     return escaped;
 }
 
+std::string obstacleHeuristicTypeName(ObstacleHeuristicType type) {
+    switch (type) {
+    case ObstacleHeuristicType::VisibilityGraph:
+        return "visibility_graph";
+    case ObstacleHeuristicType::ReverseDijkstra:
+        return "reverse_dijkstra";
+    }
+    return "unknown";
+}
+
 /**
  * @brief 检查文件是否需要写入表头
  * @param[in] path CSV文件路径
@@ -104,6 +114,8 @@ void writeHeader(std::ofstream& output) {
         << "visibility_graph_ms,"
         << "visibility_dijkstra_ms,"
         << "obstacle_lookup_ms,"
+        << "reverse_dijkstra_inflation_ms,"
+        << "reverse_dijkstra_ms,"
         << "non_obstacle_heuristic_ms,"
         << "obstacle_heuristic_ms,"
         << "heuristic_estimate_calls,"
@@ -130,6 +142,8 @@ void writeHeader(std::ofstream& output) {
         << "steer_change_penalty,"
         << "analytic_expansion_distance,"
         << "analytic_expansion_interval,"
+        << "obstacle_heuristic_type,"
+        << "obstacle_heuristic_inflation_alpha,"
         << "heuristic_name,"
         << "enable_obstacle_heuristic,"
         << "enable_analytic_expansion\n";
@@ -190,6 +204,8 @@ void ExperimentLogger::appendCsv(const std::filesystem::path& path,
            << entry.visibility_graph_ms << ','
            << entry.visibility_dijkstra_ms << ','
            << entry.obstacle_lookup_ms << ','
+           << entry.reverse_dijkstra_inflation_ms << ','
+           << entry.reverse_dijkstra_ms << ','
            << entry.non_obstacle_heuristic_ms << ','
            << entry.obstacle_heuristic_ms << ','
            << entry.heuristic_estimate_calls << ','
@@ -216,6 +232,8 @@ void ExperimentLogger::appendCsv(const std::filesystem::path& path,
            << config.steer_change_penalty << ','
            << config.analytic_expansion_distance << ','
            << config.analytic_expansion_interval << ','
+           << csvEscape(obstacleHeuristicTypeName(config.obstacle_heuristic_type)) << ','
+           << config.obstacle_heuristic_inflation_alpha << ','
            << csvEscape(entry.heuristic_name) << ','
            << (config.enable_obstacle_heuristic ? 1 : 0) << ','
            << (config.enable_analytic_expansion ? 1 : 0)

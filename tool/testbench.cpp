@@ -1,7 +1,6 @@
 #include "AppConfig.hpp"
 #include "Car.hpp"
 #include "ExperimentLogger.hpp"
-#include "HtmlWriter.hpp"
 #include "HybridAstar.hpp"
 #include "JsonExporter.hpp"
 #include "GridMap.hpp"
@@ -119,7 +118,6 @@ void exportOutputMap(const std::filesystem::path& output_map_dir,
     const std::string json = JsonExporter::exportPath(
         map, car, plan.path, plan.expanded);
     writeTextFile(base_path.string() + ".json", json);
-    writeTextFile(base_path.string() + ".html", HtmlWriter::wrap(json));
 }
 
 } // namespace
@@ -166,6 +164,8 @@ int main(int argc, char* argv[]) {
                     log_entry.visibility_graph_ms = plan.timing.visibility_graph_ms;
                     log_entry.visibility_dijkstra_ms = plan.timing.visibility_dijkstra_ms;
                     log_entry.obstacle_lookup_ms = plan.timing.obstacle_lookup_ms;
+                    log_entry.reverse_dijkstra_inflation_ms = plan.timing.reverse_dijkstra_inflation_ms;
+                    log_entry.reverse_dijkstra_ms = plan.timing.reverse_dijkstra_ms;
                     log_entry.non_obstacle_heuristic_ms = plan.timing.non_obstacle_heuristic_ms;
                     log_entry.obstacle_heuristic_ms = plan.timing.obstacle_heuristic_ms;
                     log_entry.heuristic_estimate_calls = plan.timing.heuristic_estimate_calls;

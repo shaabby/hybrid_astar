@@ -3,7 +3,6 @@
 #include "ExperimentLogger.hpp"
 #include "FltkViewer.hpp"
 #include "GridMap.hpp"
-#include "HtmlWriter.hpp"
 #include "HybridAstar.hpp"
 #include "JsonExporter.hpp"
 #include "VisualizationData.hpp"
@@ -113,6 +112,8 @@ int main(int argc, char* argv[]) {
         log_entry.visibility_graph_ms = plan.timing.visibility_graph_ms;
         log_entry.visibility_dijkstra_ms = plan.timing.visibility_dijkstra_ms;
         log_entry.obstacle_lookup_ms = plan.timing.obstacle_lookup_ms;
+        log_entry.reverse_dijkstra_inflation_ms = plan.timing.reverse_dijkstra_inflation_ms;
+        log_entry.reverse_dijkstra_ms = plan.timing.reverse_dijkstra_ms;
         log_entry.non_obstacle_heuristic_ms = plan.timing.non_obstacle_heuristic_ms;
         log_entry.obstacle_heuristic_ms = plan.timing.obstacle_heuristic_ms;
         log_entry.heuristic_estimate_calls = plan.timing.heuristic_estimate_calls;
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]) {
         log_entry.analytic_collision_check_calls = plan.timing.analytic_collision_check_calls;
         log_entry.heuristic_name = planner.heuristicName();
         ExperimentLogger::appendCsv(
-            "output/experiments.csv", log_entry, map, config);
+            "output/single_run_timing.csv", log_entry, map, config);
 
         if (!plan.success) {
             throw std::runtime_error(
@@ -143,7 +144,6 @@ int main(int argc, char* argv[]) {
             map, car, plan.path, plan.expanded);
         debugStage("write output files");
         writeTextFile("output/result.json", json);
-        writeTextFile("output/demo.html", HtmlWriter::wrap(json));
 
         const Pose2D& start = map.start();
         const Pose2D& goal = map.goal();
@@ -164,8 +164,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  generated_nodes: " << plan.generated_nodes << '\n';
         std::cout << "  runtime_ms: " << log_entry.runtime_ms << '\n';
         std::cout << "  output/result.json\n";
-        std::cout << "  output/demo.html\n";
-        std::cout << "  output/experiments.csv\n";
+        std::cout << "  output/single_run_timing.csv\n";
 
         if (options.show_viewer) {
             debugStage("open FLTK viewer");

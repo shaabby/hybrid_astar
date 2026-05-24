@@ -17,7 +17,7 @@
  * @brief 规划结果可视化数据结构
  *
  * 聚合地图、车辆配置、规划路径和搜索扩展节点，
- * 供FltkViewer和HtmlWriter使用。
+ * 供FltkViewer使用。
  */
 struct VisualizationData {
     const GridMap& map;                 ///< 栅格地图引用

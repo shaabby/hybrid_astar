@@ -1,6 +1,6 @@
 # Hybrid A* 路径规划最小闭环 Demo
 
-本项目是一个 C++23 + HTML Canvas 的 Hybrid A* 路径规划课堂展示 demo。
+本项目是一个 C++23 + FLTK 的 Hybrid A* 路径规划课堂展示 demo。
 
 当前目标不是完整工业级规划器，而是先打通最小闭环：
 
@@ -10,8 +10,8 @@ Web 地图编辑器
 C++ 读取地图
     ↓ 构造 GridMap / Car
 Hybrid A* 生成车辆位姿序列
-    ↓ 输出 result.json / demo.html
-浏览器 Canvas 动态渲染地图和小车运动
+    ↓ 输出 result.json
+FLTK 查看器渲染地图和小车运动
 ```
 
 ## 当前已完成
@@ -23,25 +23,17 @@ Hybrid A* 生成车辆位姿序列
 - `Car`：简化 bicycle model，小车以后轴中心为状态参考点；
 - `HybridAstar`：最小 Hybrid A* 核心搜索；
 - `JsonExporter`：输出 `map / vehicle / path / expanded`；
-- `HtmlWriter`：生成单文件 Canvas 动画页面；
-- `output/demo.html`：可直接双击打开查看动画。
+- `FltkViewer`：显示规划结果和搜索扩展节点；
+- `tool/path_json_viewer.cpp`：单独打开已导出的路径 JSON。
 
 当前默认地图可以规划成功，运行后会生成：
 
 ```text
 output/result.json
-output/demo.html
-output/experiments.csv
+output/single_run_timing.csv
 ```
 
-动画页面支持：
-
-- 播放 / 暂停；
-- 到达终点后自动停止；
-- 点击 `Start` 重新开始；
-- `Step` 逐帧播放；
-- 进度条拖动；
-- 当前帧数显示。
+FLTK 查看器支持路径播放和搜索扩展节点展示。
 
 ## 构建与运行
 
@@ -74,8 +66,7 @@ cmake --build build --config Release
 ```
 
 默认配置会读取 `map/default_map.json`。规划完成后程序会生成
-`output/result.json`、`output/demo.html` 和 `output/experiments.csv`，
-并尝试打开 FLTK 动画窗口。
+`output/result.json` 和 `output/single_run_timing.csv`，并尝试打开 FLTK 动画窗口。
 
 只生成输出文件、不打开 FLTK 窗口：
 
@@ -83,7 +74,7 @@ cmake --build build --config Release
 ./build/hybrid_astar --no-view config/default.yaml
 ```
 
-`--html-only` 是 `--no-view` 的等价写法。无桌面显示、SSH、容器或 CI
+`--html-only` 是 `--no-view` 的兼容别名。无桌面显示、SSH、容器或 CI
 环境下推荐使用这个模式，否则 FLTK 可能报 `Can't open display`。
 
 指定其他配置：
@@ -92,19 +83,87 @@ cmake --build build --config Release
 ./build/hybrid_astar config/other.yaml
 ```
 
-然后打开：
+查看已导出的路径 JSON：
 
-```text
-output/demo.html
+```bash
+./build/path_json_viewer output/result.json
 ```
 
 每次运行还会追加一行简要实验日志：
 
 ```text
-output/experiments.csv
+output/single_run_timing.csv
 ```
 
 日志包含地图路径、是否成功、路径点数量、扩展节点数量、规划耗时、起终点位姿、主要代价参数和启发式名称，方便对比不同参数或地图下的规划效果。
+
+如果配置中开启：
+
+```yaml
+hybrid_astar:
+  enable_timing: true
+```
+
+CSV 还会写入细分计时列，用于分析性能瓶颈：
+
+- `heuristic_prepare_ms`：启发式预处理总耗时；
+- `search_loop_ms`：Hybrid A* 主搜索循环耗时；
+- `obstacle_collect_ms`、`visibility_points_ms`、`visibility_graph_ms`、`visibility_dijkstra_ms`、`obstacle_lookup_ms`：`visibility_graph` 障碍物启发式预计算各阶段耗时；
+- `reverse_dijkstra_inflation_ms`、`reverse_dijkstra_ms`：`reverse_dijkstra` 障碍物膨胀和反向 Dijkstra 耗时；
+- `non_obstacle_heuristic_ms`、`obstacle_heuristic_ms`、`heuristic_estimate_calls`：搜索中两种启发式估价耗时和调用次数；
+- `primitive_collision_check_ms`、`primitive_collision_check_calls`：运动基元碰撞检测耗时和调用次数；
+- `analytic_expansion_ms`、`analytic_attempts`、`analytic_successes`：Reeds-Shepp 解析直连尝试耗时、次数和成功次数；
+- `analytic_rs_generation_ms`、`analytic_rs_generation_calls`、`analytic_collision_check_ms`、`analytic_collision_check_calls`：解析直连中的曲线生成和碰撞检测细分统计。
+
+关闭 `enable_timing` 时，上述细分计时列保留但值为 0，外层 `runtime_ms` 仍会记录。
+
+障碍物启发式算法由 `obstacle_heuristic_type` 选择：
+
+- `visibility_graph`：当前默认算法，使用障碍边界可视点、line-of-sight 可视图和查表估价；
+- `reverse_dijkstra`：旧版反向 Dijkstra 算法，先按 `obstacle_heuristic_inflation_alpha * vehicle.width / 2` 膨胀障碍物，再从目标格反向计算 8 邻域 cost-to-go。
+
+`obstacle_heuristic_inflation_alpha` 只影响 `reverse_dijkstra`，`0` 表示不膨胀，`1` 表示按车辆半宽膨胀。
+
+### 批量实验 testbench
+
+构建 testbench：
+
+```bash
+TMPDIR="$PWD/build/tmp" cmake --build build --target hybrid_astar_testbench --config Release
+```
+
+运行默认参数组和 `map/` 下所有地图：
+
+```bash
+./build/hybrid_astar_testbench \
+  --groups config/testbench/default_groups.txt \
+  --maps map \
+  --output output/default_timing.csv \
+  --output-map-dir output/default_timing_maps
+```
+
+常用参数：
+
+- `--groups`：参数组列表，每行格式为 `组名 配置文件路径`；
+- `--maps`：包含 `.json` 地图文件的目录；
+- `--output`：实验 CSV 输出路径；
+- `--output-map-dir`：每次规划的 JSON/HTML 可视化输出目录。
+
+例如只跑自动生成的多组参数：
+
+```bash
+./build/hybrid_astar_testbench \
+  --groups config/testbench/generated/groups.txt \
+  --maps map \
+  --output output/generated_timing.csv \
+  --output-map-dir output/generated_timing_maps
+```
+
+如果系统 `/tmp` 空间不足，和普通构建一样在命令前加：
+
+```bash
+TMPDIR="$PWD/build/tmp"
+```
 
 配置文件基本格式见 `config/default.yaml`：
 
@@ -136,6 +195,10 @@ hybrid_astar:
   analytic_expansion_interval: 25
   collision_safety_margin: 0.0
   enable_obstacle_heuristic: true
+  obstacle_lookup_resolution: 1.0
+  obstacle_heuristic_type: visibility_graph
+  obstacle_heuristic_inflation_alpha: 1.0
+  enable_timing: true
   debug: true
   debug_progress_interval: 500
 ```
@@ -167,14 +230,11 @@ TMPDIR="$PWD/build/tmp" cmake --build build --config Release
 Can't open display: :0
 ```
 
-说明当前环境没有可用图形显示。规划结果和 HTML 文件通常已经写出，可以
-改用：
+说明当前环境没有可用图形显示。规划结果 JSON 通常已经写出，可以改用：
 
 ```bash
 ./build/hybrid_astar --no-view config/default.yaml
 ```
-
-再打开 `output/demo.html` 查看动画。
 
 ## 地图编辑
 
@@ -245,7 +305,7 @@ steer ∈ {-max_steer, 0, +max_steer}
 
 ## 待改进点
 
-这个版本已经打通“地图输入 -> C++ 规划 -> JSON 输出 -> HTML 动画”的主链路。后续改进建议按下面优先级推进。
+这个版本已经打通“地图输入 -> C++ 规划 -> JSON 输出 -> FLTK 查看”的主链路。后续改进建议按下面优先级推进。
 
 ### P0 展示前优先处理
 
@@ -253,7 +313,7 @@ steer ∈ {-max_steer, 0, +max_steer}
 
 - 文档与代码状态同步；
 - 默认地图路径统一为 `map/default_map.json`；
-- HTML 动画标题已从早期直线运动 demo 改为 Hybrid A* 路径规划 demo。
+- 运行时 HTML 生成逻辑已移除，统一输出 JSON 并使用 FLTK/独立查看器查看。
 
 ### P1 影响规划质量
 
