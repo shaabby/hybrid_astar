@@ -12,11 +12,23 @@
 #include "GridMap.hpp"
 #include "LineOfSight.hpp"
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
 
 struct HybridAstarConfig;
+
+struct HeuristicTiming {
+    double obstacle_collect_ms = 0.0;
+    double visibility_points_ms = 0.0;
+    double visibility_graph_ms = 0.0;
+    double visibility_dijkstra_ms = 0.0;
+    double obstacle_lookup_ms = 0.0;
+    double non_obstacle_heuristic_ms = 0.0;
+    double obstacle_heuristic_ms = 0.0;
+    std::size_t heuristic_estimate_calls = 0;
+};
 
 /**
  * @brief Hybrid A* 启发函数接口。
@@ -68,6 +80,7 @@ public:
 
     [[nodiscard]] double estimate(const CarPose& pose) const override;
     [[nodiscard]] std::string name() const override;
+    [[nodiscard]] const HeuristicTiming& timing() const;
 
 private:
     [[nodiscard]] double euclidean(const CarPose& pose) const;
@@ -85,6 +98,8 @@ private:
     double max_steer_ = 0.0;
     bool obstacle_enabled_ = false;
     bool debug_enabled_ = false;
+    bool timing_enabled_ = false;
+    mutable HeuristicTiming timing_;
     ObstacleSet obstacle_cells_;
     std::vector<Point2D> visibility_points_;
     std::vector<std::vector<std::pair<int, double>>> visibility_graph_;

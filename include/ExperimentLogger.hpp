@@ -28,6 +28,25 @@ struct ExperimentLogEntry {
     std::size_t generated_nodes = 0; ///< 生成节点数
     std::size_t open_remaining = 0;  ///< 结束时 open set 剩余条目数
     double runtime_ms = 0.0;   ///< 运行时间（毫秒）
+    double heuristic_prepare_ms = 0.0;
+    double search_loop_ms = 0.0;
+    double obstacle_collect_ms = 0.0;
+    double visibility_points_ms = 0.0;
+    double visibility_graph_ms = 0.0;
+    double visibility_dijkstra_ms = 0.0;
+    double obstacle_lookup_ms = 0.0;
+    double non_obstacle_heuristic_ms = 0.0;
+    double obstacle_heuristic_ms = 0.0;
+    std::size_t heuristic_estimate_calls = 0;
+    double primitive_collision_check_ms = 0.0;
+    std::size_t primitive_collision_check_calls = 0;
+    double analytic_expansion_ms = 0.0;
+    std::size_t analytic_attempts = 0;
+    std::size_t analytic_successes = 0;
+    double analytic_rs_generation_ms = 0.0;
+    std::size_t analytic_rs_generation_calls = 0;
+    double analytic_collision_check_ms = 0.0;
+    std::size_t analytic_collision_check_calls = 0;
     std::string heuristic_name; ///< 使用的启发式名称
 };
 

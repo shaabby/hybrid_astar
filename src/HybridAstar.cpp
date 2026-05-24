@@ -4,6 +4,7 @@
 #include "ReedsShepp.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -20,6 +21,29 @@ namespace {
 
 /// @brief 圆周率常量。
 constexpr double kPi = 3.14159265358979323846;
+
+using Clock = std::chrono::steady_clock;
+
+double elapsedMs(Clock::time_point start, Clock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+void copyHeuristicTiming(TimingBreakdown& timing, const Heuristic& heuristic) {
+    const auto* combined = dynamic_cast<const CombinedHeuristic*>(&heuristic);
+    if (combined == nullptr) {
+        return;
+    }
+
+    const HeuristicTiming& heuristic_timing = combined->timing();
+    timing.obstacle_collect_ms = heuristic_timing.obstacle_collect_ms;
+    timing.visibility_points_ms = heuristic_timing.visibility_points_ms;
+    timing.visibility_graph_ms = heuristic_timing.visibility_graph_ms;
+    timing.visibility_dijkstra_ms = heuristic_timing.visibility_dijkstra_ms;
+    timing.obstacle_lookup_ms = heuristic_timing.obstacle_lookup_ms;
+    timing.non_obstacle_heuristic_ms = heuristic_timing.non_obstacle_heuristic_ms;
+    timing.obstacle_heuristic_ms = heuristic_timing.obstacle_heuristic_ms;
+    timing.heuristic_estimate_calls = heuristic_timing.heuristic_estimate_calls;
+}
 
 /**
  * @brief Hybrid A* 搜索节点。
@@ -185,7 +209,8 @@ std::optional<ReedsSheppPath> tryAnalyticExpansion(
     const CarPose& pose,
     const GridMap& map,
     const HybridAstarConfig& config,
-    const ReedsSheppCollisionChecker& collision_checker) {
+    const ReedsSheppCollisionChecker& collision_checker,
+    TimingBreakdown& timing) {
     const Pose2D& goal = map.goal();
     const std::vector<double> xy_offsets = {
         0.0,
@@ -212,10 +237,31 @@ std::optional<ReedsSheppPath> tryAnalyticExpansion(
                 candidate_goal.theta = normalizeAngle(goal.theta + dtheta);
                 candidate_goal.direction = 1;
 
-                const std::optional<ReedsSheppPath> candidate =
-                    generator.generate(pose, candidate_goal);
+                std::optional<ReedsSheppPath> candidate;
+                if (config.enable_timing) {
+                    const auto generation_start = Clock::now();
+                    candidate = generator.generate(pose, candidate_goal);
+                    timing.analytic_rs_generation_ms += elapsedMs(
+                        generation_start, Clock::now());
+                    ++timing.analytic_rs_generation_calls;
+                } else {
+                    candidate = generator.generate(pose, candidate_goal);
+                }
 
-                if (candidate && collision_checker.isCollisionFree(*candidate)) {
+                bool collision_free = false;
+                if (candidate) {
+                    if (config.enable_timing) {
+                        const auto collision_start = Clock::now();
+                        collision_free = collision_checker.isCollisionFree(*candidate);
+                        timing.analytic_collision_check_ms += elapsedMs(
+                            collision_start, Clock::now());
+                        ++timing.analytic_collision_check_calls;
+                    } else {
+                        collision_free = collision_checker.isCollisionFree(*candidate);
+                    }
+                }
+
+                if (candidate && collision_free) {
                     return candidate;
                 }
             }
@@ -304,8 +350,16 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
         std::cerr << "[debug] planner: prepare heuristic "
                   << heuristicName() << '\n';
     }
-    heuristic_->prepare(map, car, config_);
+    if (config_.enable_timing) {
+        const auto prepare_start = Clock::now();
+        heuristic_->prepare(map, car, config_);
+        result.timing.heuristic_prepare_ms = elapsedMs(
+            prepare_start, Clock::now());
+    } else {
+        heuristic_->prepare(map, car, config_);
+    }
     const Heuristic& heuristic = *heuristic_;
+    copyHeuristicTiming(result.timing, heuristic);
     if (config_.debug) {
         std::cerr << "[debug] planner: initialize collision checkers\n";
     }
@@ -387,6 +441,17 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     // 4. 主搜索循环（A*）
     // ------------------------------------------------------------------
     int iterations = 0;
+    Clock::time_point search_start;
+    if (config_.enable_timing) {
+        search_start = Clock::now();
+    }
+    const auto finishResult = [&](PlanResult& plan_result) {
+        if (config_.enable_timing) {
+            plan_result.timing.search_loop_ms = elapsedMs(
+                search_start, Clock::now());
+            copyHeuristicTiming(plan_result.timing, heuristic);
+        }
+    };
     while (!open.empty() && iterations < config_.max_iterations) {
         ++iterations;
         result.iterations = iterations;
@@ -439,6 +504,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                           << " expanded=" << result.expanded.size()
                           << '\n';
             }
+            finishResult(result);
             return result;
         }
 
@@ -447,9 +513,25 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
 
         if (shouldTryAnalyticExpansion(
                 current.pose, map, config_, iterations)) {
-            if (const std::optional<ReedsSheppPath> analytic_path =
-                    tryAnalyticExpansion(rs_generator, current.pose, map,
-                                         config_, rs_collision_checker)) {
+            if (config_.enable_timing) {
+                ++result.timing.analytic_attempts;
+            }
+            Clock::time_point analytic_start;
+            if (config_.enable_timing) {
+                analytic_start = Clock::now();
+            }
+            const std::optional<ReedsSheppPath> analytic_path =
+                tryAnalyticExpansion(rs_generator, current.pose, map,
+                                     config_, rs_collision_checker,
+                                     result.timing);
+            if (config_.enable_timing) {
+                result.timing.analytic_expansion_ms += elapsedMs(
+                    analytic_start, Clock::now());
+            }
+            if (analytic_path) {
+                if (config_.enable_timing) {
+                    ++result.timing.analytic_successes;
+                }
                 result.success = true;
                 result.path = reconstructPath(nodes, current_id);
                 result.path.insert(result.path.end(),
@@ -464,6 +546,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                               << " expanded=" << result.expanded.size()
                               << '\n';
                 }
+                finishResult(result);
                 return result;
             }
         }
@@ -483,7 +566,18 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                     pose = car.step(pose, steer, direction, config_.step_size);
                     pose.theta = normalizeAngle(pose.theta);
 
-                    if (collision_checker.collides(pose)) {
+                    bool pose_collides = false;
+                    if (config_.enable_timing) {
+                        const auto collision_start = Clock::now();
+                        pose_collides = collision_checker.collides(pose);
+                        result.timing.primitive_collision_check_ms += elapsedMs(
+                            collision_start, Clock::now());
+                        ++result.timing.primitive_collision_check_calls;
+                    } else {
+                        pose_collides = collision_checker.collides(pose);
+                    }
+
+                    if (pose_collides) {
                         collision = true;
                         break;
                     }
@@ -503,6 +597,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                                       << " expanded=" << result.expanded.size()
                                       << '\n';
                         }
+                        finishResult(result);
                         return result;
                     }
                 }
@@ -561,6 +656,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                   << " open=" << result.open_remaining
                   << '\n';
     }
+    finishResult(result);
     return result;
 }
 

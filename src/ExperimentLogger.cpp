@@ -97,6 +97,25 @@ void writeHeader(std::ofstream& output) {
         << "generated_nodes,"
         << "open_remaining,"
         << "runtime_ms,"
+        << "heuristic_prepare_ms,"
+        << "search_loop_ms,"
+        << "obstacle_collect_ms,"
+        << "visibility_points_ms,"
+        << "visibility_graph_ms,"
+        << "visibility_dijkstra_ms,"
+        << "obstacle_lookup_ms,"
+        << "non_obstacle_heuristic_ms,"
+        << "obstacle_heuristic_ms,"
+        << "heuristic_estimate_calls,"
+        << "primitive_collision_check_ms,"
+        << "primitive_collision_check_calls,"
+        << "analytic_expansion_ms,"
+        << "analytic_attempts,"
+        << "analytic_successes,"
+        << "analytic_rs_generation_ms,"
+        << "analytic_rs_generation_calls,"
+        << "analytic_collision_check_ms,"
+        << "analytic_collision_check_calls,"
         << "start_x,"
         << "start_y,"
         << "start_theta,"
@@ -164,6 +183,25 @@ void ExperimentLogger::appendCsv(const std::filesystem::path& path,
            << entry.generated_nodes << ','
            << entry.open_remaining << ','
            << entry.runtime_ms << ','
+           << entry.heuristic_prepare_ms << ','
+           << entry.search_loop_ms << ','
+           << entry.obstacle_collect_ms << ','
+           << entry.visibility_points_ms << ','
+           << entry.visibility_graph_ms << ','
+           << entry.visibility_dijkstra_ms << ','
+           << entry.obstacle_lookup_ms << ','
+           << entry.non_obstacle_heuristic_ms << ','
+           << entry.obstacle_heuristic_ms << ','
+           << entry.heuristic_estimate_calls << ','
+           << entry.primitive_collision_check_ms << ','
+           << entry.primitive_collision_check_calls << ','
+           << entry.analytic_expansion_ms << ','
+           << entry.analytic_attempts << ','
+           << entry.analytic_successes << ','
+           << entry.analytic_rs_generation_ms << ','
+           << entry.analytic_rs_generation_calls << ','
+           << entry.analytic_collision_check_ms << ','
+           << entry.analytic_collision_check_calls << ','
            << start.x << ','
            << start.y << ','
            << start.theta << ','

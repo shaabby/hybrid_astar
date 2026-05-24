@@ -90,6 +90,7 @@ hybrid_astar:
   collision_safety_margin: 0.05
   enable_obstacle_heuristic: true
   obstacle_lookup_resolution: 0.25
+  enable_timing: yes
   debug: no
   debug_progress_interval: 7
 )");
@@ -121,6 +122,8 @@ hybrid_astar:
                   "hybrid_astar.enable_analytic_expansion should parse 0");
     runner.expect(near(config.hybrid_astar.obstacle_lookup_resolution, 0.25),
                   "hybrid_astar.obstacle_lookup_resolution should load");
+    runner.expect(config.hybrid_astar.enable_timing,
+                  "hybrid_astar.enable_timing should parse yes");
     runner.expect(!config.hybrid_astar.debug,
                   "hybrid_astar.debug should parse no");
 }

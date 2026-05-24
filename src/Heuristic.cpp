@@ -12,6 +12,7 @@
 #include "ReedsShepp.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -59,6 +60,12 @@ double distance2d(Point2D lhs, Point2D rhs) {
     const double dx = lhs.x - rhs.x;
     const double dy = lhs.y - rhs.y;
     return std::sqrt(dx * dx + dy * dy);
+}
+
+using Clock = std::chrono::steady_clock;
+
+double elapsedMs(Clock::time_point start, Clock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
 /**
@@ -190,6 +197,8 @@ void CombinedHeuristic::prepare(const GridMap& map,
     max_steer_ = car.maxSteer();
     obstacle_enabled_ = config.enable_obstacle_heuristic;
     debug_enabled_ = config.debug;
+    timing_enabled_ = config.enable_timing;
+    timing_ = HeuristicTiming{};
 
     // 重置可视点图数据
     obstacle_cells_.clear();
@@ -207,6 +216,10 @@ void CombinedHeuristic::prepare(const GridMap& map,
         if (config.debug) {
             std::cerr << "[debug] heuristic: collect obstacle cells\n";
         }
+        Clock::time_point obstacle_collect_start;
+        if (timing_enabled_) {
+            obstacle_collect_start = Clock::now();
+        }
         // 收集所有障碍物单元格
         for (int y = 0; y < height_; ++y) {
             for (int x = 0; x < width_; ++x) {
@@ -215,12 +228,20 @@ void CombinedHeuristic::prepare(const GridMap& map,
                 }
             }
         }
+        if (timing_enabled_) {
+            timing_.obstacle_collect_ms += elapsedMs(
+                obstacle_collect_start, Clock::now());
+        }
         if (config.debug) {
             std::cerr << "[debug] heuristic: obstacle cells="
                       << obstacle_cells_.size() << '\n';
             std::cerr << "[debug] heuristic: extract visibility points\n";
         }
 
+        Clock::time_point visibility_points_start;
+        if (timing_enabled_) {
+            visibility_points_start = Clock::now();
+        }
         // 提取可视点：只有1个角点接触障碍物的网格角点
         for (int y = 0; y <= height_; ++y) {
             for (int x = 0; x <= width_; ++x) {
@@ -231,6 +252,10 @@ void CombinedHeuristic::prepare(const GridMap& map,
                     });
                 }
             }
+        }
+        if (timing_enabled_) {
+            timing_.visibility_points_ms += elapsedMs(
+                visibility_points_start, Clock::now());
         }
         if (config.debug) {
             std::cerr << "[debug] heuristic: visibility points="
@@ -246,6 +271,10 @@ void CombinedHeuristic::prepare(const GridMap& map,
         if (config.debug) {
             std::cerr << "[debug] heuristic: build visibility graph"
                       << " candidates=" << visibility_points_.size() << '\n';
+        }
+        Clock::time_point visibility_graph_start;
+        if (timing_enabled_) {
+            visibility_graph_start = Clock::now();
         }
         std::size_t visibility_edge_count = 0;
         for (std::size_t i = 0; i < visibility_points_.size(); ++i) {
@@ -274,6 +303,10 @@ void CombinedHeuristic::prepare(const GridMap& map,
                 ++visibility_edge_count;
             }
         }
+        if (timing_enabled_) {
+            timing_.visibility_graph_ms += elapsedMs(
+                visibility_graph_start, Clock::now());
+        }
         if (config.debug) {
             std::cerr << "[debug] heuristic: visibility graph edges="
                       << visibility_edge_count << '\n';
@@ -283,13 +316,29 @@ void CombinedHeuristic::prepare(const GridMap& map,
         if (config.debug) {
             std::cerr << "[debug] heuristic: run visibility graph Dijkstra\n";
         }
+        Clock::time_point visibility_dijkstra_start;
+        if (timing_enabled_) {
+            visibility_dijkstra_start = Clock::now();
+        }
         visibility_distance_to_goal_ =
             runGraphDijkstra(visibility_graph_, visibility_goal_index_);
+        if (timing_enabled_) {
+            timing_.visibility_dijkstra_ms += elapsedMs(
+                visibility_dijkstra_start, Clock::now());
+        }
         if (config.debug) {
             std::cerr << "[debug] heuristic: Dijkstra complete\n";
             std::cerr << "[debug] heuristic: build obstacle lookup\n";
         }
+        Clock::time_point obstacle_lookup_start;
+        if (timing_enabled_) {
+            obstacle_lookup_start = Clock::now();
+        }
         buildObstacleLookup();
+        if (timing_enabled_) {
+            timing_.obstacle_lookup_ms += elapsedMs(
+                obstacle_lookup_start, Clock::now());
+        }
         if (config.debug) {
             std::cerr << "[debug] heuristic: obstacle lookup="
                       << obstacle_lookup_width_ << "x"
@@ -306,8 +355,32 @@ void CombinedHeuristic::prepare(const GridMap& map,
  * @return max(非障碍物估计, 障碍物估计)
  */
 double CombinedHeuristic::estimate(const CarPose& pose) const {
-    const double non_obs = nonObstacleEstimate(pose);
-    const double obs = obstacle_enabled_ ? obstacleEstimate(pose) : 0.0;
+    if (timing_enabled_) {
+        ++timing_.heuristic_estimate_calls;
+    }
+
+    double non_obs = 0.0;
+    if (timing_enabled_) {
+        const auto non_obstacle_start = Clock::now();
+        non_obs = nonObstacleEstimate(pose);
+        timing_.non_obstacle_heuristic_ms += elapsedMs(
+            non_obstacle_start, Clock::now());
+    } else {
+        non_obs = nonObstacleEstimate(pose);
+    }
+
+    double obs = 0.0;
+    if (obstacle_enabled_) {
+        if (timing_enabled_) {
+            const auto obstacle_start = Clock::now();
+            obs = obstacleEstimate(pose);
+            timing_.obstacle_heuristic_ms += elapsedMs(
+                obstacle_start, Clock::now());
+        } else {
+            obs = obstacleEstimate(pose);
+        }
+    }
+
     const double diff = non_obs - obs;
     HeuristicDiffLogStats& stats = heuristicDiffLogStats();
     if (diff > 0.0) {
@@ -323,6 +396,10 @@ double CombinedHeuristic::estimate(const CarPose& pose) const {
 /** @brief 返回启发式名称。 */
 std::string CombinedHeuristic::name() const {
     return "combined";
+}
+
+const HeuristicTiming& CombinedHeuristic::timing() const {
+    return timing_;
 }
 
 /**

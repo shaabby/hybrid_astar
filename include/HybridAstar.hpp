@@ -38,8 +38,31 @@ struct HybridAstarConfig {
     double collision_safety_margin;    ///< 车辆footprint碰撞检测安全外扩
     bool enable_obstacle_heuristic;    ///< 是否启用障碍物启发式
     double obstacle_lookup_resolution;  ///< 障碍物启发式查表分辨率
+    bool enable_timing;                 ///< 是否启用细分计时统计
     bool debug;                        ///< 是否输出运行阶段调试信息
     int debug_progress_interval;       ///< 搜索循环调试输出间隔
+};
+
+struct TimingBreakdown {
+    double heuristic_prepare_ms = 0.0;
+    double search_loop_ms = 0.0;
+    double obstacle_collect_ms = 0.0;
+    double visibility_points_ms = 0.0;
+    double visibility_graph_ms = 0.0;
+    double visibility_dijkstra_ms = 0.0;
+    double obstacle_lookup_ms = 0.0;
+    double non_obstacle_heuristic_ms = 0.0;
+    double obstacle_heuristic_ms = 0.0;
+    std::size_t heuristic_estimate_calls = 0;
+    double primitive_collision_check_ms = 0.0;
+    std::size_t primitive_collision_check_calls = 0;
+    double analytic_expansion_ms = 0.0;
+    std::size_t analytic_attempts = 0;
+    std::size_t analytic_successes = 0;
+    double analytic_rs_generation_ms = 0.0;
+    std::size_t analytic_rs_generation_calls = 0;
+    double analytic_collision_check_ms = 0.0;
+    std::size_t analytic_collision_check_calls = 0;
 };
 
 /**
@@ -52,6 +75,7 @@ struct PlanResult {
     int iterations = 0;            ///< 搜索循环迭代次数
     std::size_t generated_nodes = 0; ///< 搜索过程中生成的节点数量
     std::size_t open_remaining = 0;  ///< 结束时 open set 中剩余条目数量
+    TimingBreakdown timing;          ///< 细分计时统计
 };
 
 /**

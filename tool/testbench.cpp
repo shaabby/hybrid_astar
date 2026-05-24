@@ -159,6 +159,25 @@ int main(int argc, char* argv[]) {
                     log_entry.open_remaining = plan.open_remaining;
                     log_entry.runtime_ms = std::chrono::duration<double, std::milli>(
                         plan_end - plan_start).count();
+                    log_entry.heuristic_prepare_ms = plan.timing.heuristic_prepare_ms;
+                    log_entry.search_loop_ms = plan.timing.search_loop_ms;
+                    log_entry.obstacle_collect_ms = plan.timing.obstacle_collect_ms;
+                    log_entry.visibility_points_ms = plan.timing.visibility_points_ms;
+                    log_entry.visibility_graph_ms = plan.timing.visibility_graph_ms;
+                    log_entry.visibility_dijkstra_ms = plan.timing.visibility_dijkstra_ms;
+                    log_entry.obstacle_lookup_ms = plan.timing.obstacle_lookup_ms;
+                    log_entry.non_obstacle_heuristic_ms = plan.timing.non_obstacle_heuristic_ms;
+                    log_entry.obstacle_heuristic_ms = plan.timing.obstacle_heuristic_ms;
+                    log_entry.heuristic_estimate_calls = plan.timing.heuristic_estimate_calls;
+                    log_entry.primitive_collision_check_ms = plan.timing.primitive_collision_check_ms;
+                    log_entry.primitive_collision_check_calls = plan.timing.primitive_collision_check_calls;
+                    log_entry.analytic_expansion_ms = plan.timing.analytic_expansion_ms;
+                    log_entry.analytic_attempts = plan.timing.analytic_attempts;
+                    log_entry.analytic_successes = plan.timing.analytic_successes;
+                    log_entry.analytic_rs_generation_ms = plan.timing.analytic_rs_generation_ms;
+                    log_entry.analytic_rs_generation_calls = plan.timing.analytic_rs_generation_calls;
+                    log_entry.analytic_collision_check_ms = plan.timing.analytic_collision_check_ms;
+                    log_entry.analytic_collision_check_calls = plan.timing.analytic_collision_check_calls;
                     log_entry.heuristic_name = planner.heuristicName();
 
                     ExperimentLogger::appendCsv(
