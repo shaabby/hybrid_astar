@@ -3,8 +3,38 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build"
+BUILD_DIR="${BUILD_DIR:-${ROOT_DIR}/build}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
+
+usage() {
+    cat <<EOF
+Usage: $0 [result.json|json_dir] [--path name|index]
+       $0 [result.json|json_dir] --list
+       $0 --list
+       $0 --help
+
+If no JSON file or directory is provided, defaults to output/result.json.
+If a directory is provided, opens all *.json files in that directory in sorted order.
+EOF
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    usage
+    exit 0
+fi
+
+TARGET="output/result.json"
+VIEWER_ARGS=()
+
+if [[ "$#" -gt 0 ]]; then
+    if [[ "${1}" == --* ]]; then
+        VIEWER_ARGS=("$@")
+    else
+        TARGET="${1}"
+        shift
+        VIEWER_ARGS=("$@")
+    fi
+fi
 
 cd "${ROOT_DIR}"
 
@@ -26,10 +56,26 @@ if [[ ! -x "${EXECUTABLE}" ]]; then
     exit 1
 fi
 
-if [[ "$#" -eq 0 ]]; then
-    echo "[view-path] Opening output/result.json..."
-    "${EXECUTABLE}" output/result.json
-else
-    echo "[view-path] Opening $*..."
-    "${EXECUTABLE}" "$@"
+if [[ -d "${TARGET}" ]]; then
+    mapfile -t JSON_FILES < <(find "${TARGET}" -maxdepth 1 -type f -name '*.json' | sort)
+    if [[ "${#JSON_FILES[@]}" -eq 0 ]]; then
+        echo "[view-path] No *.json files found in directory: ${TARGET}" >&2
+        exit 1
+    fi
+
+    echo "[view-path] Opening ${#JSON_FILES[@]} JSON file(s) from ${TARGET}..."
+    for index in "${!JSON_FILES[@]}"; do
+        json_file="${JSON_FILES[${index}]}"
+        echo "[view-path] [$((index + 1))/${#JSON_FILES[@]}] ${json_file} ${VIEWER_ARGS[*]}"
+        "${EXECUTABLE}" "${json_file}" "${VIEWER_ARGS[@]}"
+    done
+    exit 0
 fi
+
+if [[ ! -f "${TARGET}" ]]; then
+    echo "[view-path] JSON file or directory not found: ${TARGET}" >&2
+    exit 1
+fi
+
+echo "[view-path] Opening ${TARGET} ${VIEWER_ARGS[*]}..."
+exec "${EXECUTABLE}" "${TARGET}" "${VIEWER_ARGS[@]}"

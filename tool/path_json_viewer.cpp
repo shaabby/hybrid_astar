@@ -2,13 +2,13 @@
 #include "GridMap.hpp"
 #include "VisualizationData.hpp"
 
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <optional>
-#include <regex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -25,7 +25,6 @@ struct LoadedResult {
     GridMap map;
     VehicleConfig vehicle;
     std::vector<PathRecord> paths;
-    std::vector<CarPose> expanded;
 };
 
 struct ToolOptions {
@@ -46,20 +45,47 @@ std::string readTextFile(const std::filesystem::path& path) {
     };
 }
 
+std::size_t skipWhitespace(const std::string& text, std::size_t pos) {
+    while (pos < text.size()
+           && std::isspace(static_cast<unsigned char>(text[pos]))) {
+        ++pos;
+    }
+    return pos;
+}
+
+std::optional<std::size_t> findFieldValue(const std::string& object,
+                                          const std::string& key) {
+    const std::string needle = "\"" + key + "\"";
+    std::size_t pos = 0;
+    while ((pos = object.find(needle, pos)) != std::string::npos) {
+        std::size_t colon = skipWhitespace(object, pos + needle.size());
+        if (colon < object.size() && object[colon] == ':') {
+            return skipWhitespace(object, colon + 1);
+        }
+        pos += needle.size();
+    }
+    return std::nullopt;
+}
+
 double readNumberField(const std::string& object,
                        const std::string& key,
                        double fallback,
                        bool required) {
-    const std::regex pattern(
-        "\"" + key + R"("\s*:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))");
-    std::smatch match;
-    if (std::regex_search(object, match, pattern)) {
-        return std::stod(match[1].str());
+    const std::optional<std::size_t> pos = findFieldValue(object, key);
+    if (!pos) {
+        if (required) {
+            throw std::runtime_error("Missing numeric field: " + key);
+        }
+        return fallback;
     }
-    if (required) {
-        throw std::runtime_error("Missing numeric field: " + key);
+
+    const char* start = object.c_str() + *pos;
+    char* end = nullptr;
+    const double value = std::strtod(start, &end);
+    if (end == start) {
+        throw std::runtime_error("Invalid numeric field: " + key);
     }
-    return fallback;
+    return value;
 }
 
 int readIntField(const std::string& object,
@@ -71,37 +97,68 @@ int readIntField(const std::string& object,
 
 std::optional<std::string> readStringFieldOptional(const std::string& object,
                                                    const std::string& key) {
-    const std::regex pattern(
-        "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-    std::smatch match;
-    if (std::regex_search(object, match, pattern)) {
-        return match[1].str();
+    const std::optional<std::size_t> value_pos = findFieldValue(object, key);
+    if (!value_pos || *value_pos >= object.size() || object[*value_pos] != '"') {
+        return std::nullopt;
     }
-    return std::nullopt;
+
+    std::string value;
+    for (std::size_t i = *value_pos + 1; i < object.size(); ++i) {
+        if (object[i] == '\\' && i + 1 < object.size()) {
+            value.push_back(object[i + 1]);
+            ++i;
+            continue;
+        }
+        if (object[i] == '"') {
+            return value;
+        }
+        value.push_back(object[i]);
+    }
+    throw std::runtime_error("Unclosed string field: " + key);
 }
 
-std::string readObjectField(const std::string& json, const std::string& key) {
-    const std::regex start_pattern("\"" + key + R"("\s*:\s*\{)");
-    std::smatch match;
-    if (!std::regex_search(json, match, start_pattern)) {
-        throw std::runtime_error("Missing object field: " + key);
+std::string readCompoundField(const std::string& json,
+                              const std::string& key,
+                              char open,
+                              char close,
+                              const std::string& label) {
+    const std::optional<std::size_t> value_pos = findFieldValue(json, key);
+    if (!value_pos || *value_pos >= json.size() || json[*value_pos] != open) {
+        throw std::runtime_error("Missing " + label + " field: " + key);
     }
 
-    std::size_t pos =
-        static_cast<std::size_t>(match.position() + match.length() - 1);
     int depth = 0;
-    for (std::size_t i = pos; i < json.size(); ++i) {
-        if (json[i] == '{') {
+    bool in_string = false;
+    bool escaped = false;
+    for (std::size_t i = *value_pos; i < json.size(); ++i) {
+        const char c = json[i];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+        } else if (c == open) {
             ++depth;
-        } else if (json[i] == '}') {
+        } else if (c == close) {
             --depth;
             if (depth == 0) {
-                return json.substr(pos, i - pos + 1);
+                return json.substr(*value_pos, i - *value_pos + 1);
             }
         }
     }
 
-    throw std::runtime_error("Unclosed object field: " + key);
+    throw std::runtime_error("Unclosed " + label + " field: " + key);
+}
+
+std::string readObjectField(const std::string& json, const std::string& key) {
+    return readCompoundField(json, key, '{', '}', "object");
 }
 
 std::optional<std::string> readObjectFieldOptional(const std::string& json,
@@ -114,27 +171,7 @@ std::optional<std::string> readObjectFieldOptional(const std::string& json,
 }
 
 std::string readArrayField(const std::string& json, const std::string& key) {
-    const std::regex start_pattern("\"" + key + R"("\s*:\s*\[)");
-    std::smatch match;
-    if (!std::regex_search(json, match, start_pattern)) {
-        throw std::runtime_error("Missing array field: " + key);
-    }
-
-    std::size_t pos =
-        static_cast<std::size_t>(match.position() + match.length() - 1);
-    int depth = 0;
-    for (std::size_t i = pos; i < json.size(); ++i) {
-        if (json[i] == '[') {
-            ++depth;
-        } else if (json[i] == ']') {
-            --depth;
-            if (depth == 0) {
-                return json.substr(pos, i - pos + 1);
-            }
-        }
-    }
-
-    throw std::runtime_error("Unclosed array field: " + key);
+    return readCompoundField(json, key, '[', ']', "array");
 }
 
 std::optional<std::string> readArrayFieldOptional(const std::string& json,
@@ -309,11 +346,6 @@ LoadedResult loadResultJson(const std::filesystem::path& json_path) {
         }
     }
 
-    if (const std::optional<std::string> expanded =
-            readArrayFieldOptional(json, "expanded")) {
-        result.expanded = readPoseArray(*expanded);
-    }
-
     if (result.paths.empty()) {
         throw std::runtime_error(
             "JSON does not contain path or paths[].samples");
@@ -436,7 +468,7 @@ int main(int argc, char* argv[]) {
             .map = result.map,
             .vehicle = result.vehicle,
             .path = selected.samples,
-            .expanded = result.expanded
+            .expanded = {}
         };
         FltkViewer viewer(visualization);
         return viewer.run();

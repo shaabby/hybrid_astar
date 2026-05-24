@@ -23,8 +23,9 @@ FLTK 查看器渲染地图和小车运动
 - `Car`：简化 bicycle model，小车以后轴中心为状态参考点；
 - `HybridAstar`：最小 Hybrid A* 核心搜索；
 - `JsonExporter`：输出 `map / vehicle / path / expanded`；
-- `FltkViewer`：显示规划结果和搜索扩展节点；
-- `tool/path_json_viewer.cpp`：单独打开已导出的路径 JSON。
+- `FltkViewer`：显示规划结果、路径动画和车辆姿态；
+- `tool/path_json_viewer.cpp`：单独打开已导出的路径 JSON；
+- `tool/view_path_json.sh`：构建并打开单个路径 JSON，或按顺序打开目录下所有 JSON。
 
 当前默认地图可以规划成功，运行后会生成：
 
@@ -33,7 +34,7 @@ output/result.json
 output/single_run_timing.csv
 ```
 
-FLTK 查看器支持路径播放和搜索扩展节点展示。
+FLTK 查看器支持路径播放、暂停、步进和时间轴拖动。
 
 ## 构建与运行
 
@@ -86,8 +87,29 @@ cmake --build build --config Release
 查看已导出的路径 JSON：
 
 ```bash
+./tool/view_path_json.sh output/result.json
+```
+
+查看目录下所有路径 JSON，脚本会按文件名排序逐个打开：
+
+```bash
+./tool/view_path_json.sh output/obs_heuristic_compare_maps/reverse_dijkstra
+```
+
+只列出 JSON 中包含的路径，不打开窗口：
+
+```bash
+./tool/view_path_json.sh output/result.json --list
+./tool/view_path_json.sh output/obs_heuristic_compare_maps/reverse_dijkstra --list
+```
+
+也可以直接调用查看器可执行文件：
+
+```bash
 ./build/path_json_viewer output/result.json
 ```
+
+路径 JSON 查看器默认只加载最终路径，不加载 `expanded` 搜索扩展节点，因此大规模实验输出也可以快速打开。
 
 每次运行还会追加一行简要实验日志：
 
@@ -124,6 +146,37 @@ CSV 还会写入细分计时列，用于分析性能瓶颈：
 
 `obstacle_heuristic_inflation_alpha` 只影响 `reverse_dijkstra`，`0` 表示不膨胀，`1` 表示按车辆半宽膨胀。
 
+### 生成测试地图
+
+生成一组固定尺寸的测试地图：
+
+```bash
+python3 scripts/generate_testbench_maps.py \
+  --output-dir map/generated \
+  --width 60 \
+  --height 36 \
+  --seed 42
+```
+
+生成多种尺寸的测试地图：
+
+```bash
+python3 scripts/generate_testbench_maps.py \
+  --output-dir map/generated \
+  --sizes 40x25 60x36 80x50 \
+  --seed 42
+```
+
+脚本会生成 `empty`、`simple`、`narrow`、`reverse`、`u`、`unreach` 等类别地图，并写出 `maps.txt` 作为索引。`testbench` 不需要读取索引文件，直接把输出目录传给 `--maps` 即可：
+
+```bash
+./build/hybrid_astar_testbench \
+  --groups config/testbench/default_groups.txt \
+  --maps map/generated \
+  --output output/generated_maps_timing.csv \
+  --output-map-dir output/generated_maps_results
+```
+
 ### 批量实验 testbench
 
 构建 testbench：
@@ -147,7 +200,7 @@ TMPDIR="$PWD/build/tmp" cmake --build build --target hybrid_astar_testbench --co
 - `--groups`：参数组列表，每行格式为 `组名 配置文件路径`；
 - `--maps`：包含 `.json` 地图文件的目录；
 - `--output`：实验 CSV 输出路径；
-- `--output-map-dir`：每次规划的 JSON/HTML 可视化输出目录。
+- `--output-map-dir`：每次规划的 JSON 路径输出目录。
 
 例如只跑自动生成的多组参数：
 
@@ -326,8 +379,8 @@ steer ∈ {-max_steer, 0, +max_steer}
 
 ### P2 提升课堂展示效果
 
-1. 在 Canvas 中显示 `expanded` 搜索节点  
-   `expanded` 已输出到 JSON，但当前页面还没有绘制搜索扩展点。展示扩展过程能更直观解释 Hybrid A* 与普通 A* 的区别。
+1. 在 Canvas 中可选显示 `expanded` 搜索节点  
+   `expanded` 已输出到 JSON，但独立路径查看器默认跳过该字段以保证大文件打开速度。后续可增加命令行开关，在需要讲解搜索过程时再加载和绘制扩展点。
 2. 增加路径平滑  
    当前 motion primitive 拼接路径可行但不够顺。可以增加简单 smoother，或至少做采样点降噪和曲率连续性优化。
 3. 增加规划失败诊断信息  
