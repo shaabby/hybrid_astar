@@ -246,7 +246,6 @@ def parse_args():
     parser.add_argument("--width", type=int, default=BASE_WIDTH)
     parser.add_argument("--height", type=int, default=BASE_HEIGHT)
     parser.add_argument("--sizes", type=parse_size, nargs="*")
-    parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
 

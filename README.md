@@ -154,8 +154,7 @@ CSV 还会写入细分计时列，用于分析性能瓶颈：
 python3 scripts/generate_testbench_maps.py \
   --output-dir map/generated \
   --width 60 \
-  --height 36 \
-  --seed 42
+  --height 36
 ```
 
 生成多种尺寸的测试地图：
@@ -163,11 +162,10 @@ python3 scripts/generate_testbench_maps.py \
 ```bash
 python3 scripts/generate_testbench_maps.py \
   --output-dir map/generated \
-  --sizes 40x25 60x36 80x50 \
-  --seed 42
+  --sizes 40x25 60x36 80x50
 ```
 
-脚本会生成 `empty`、`simple`、`narrow`、`reverse`、`u`、`unreach` 等类别地图，并写出 `maps.txt` 作为索引。`testbench` 不需要读取索引文件，直接把输出目录传给 `--maps` 即可：
+脚本使用固定模板生成 `empty`、`simple`、`narrow`、`reverse`、`u`、`unreach` 等类别地图，并写出 `maps.txt` 作为索引；不会使用随机障碍物。`testbench` 不需要读取索引文件，直接把输出目录传给 `--maps` 即可：
 
 ```bash
 ./build/hybrid_astar_testbench \
@@ -175,6 +173,50 @@ python3 scripts/generate_testbench_maps.py \
   --maps map/generated \
   --output output/generated_maps_timing.csv \
   --output-map-dir output/generated_maps_results
+```
+
+使用生成地图对比两种障碍物启发式：
+
+```bash
+python3 scripts/generate_testbench_maps.py \
+  --output-dir map/generated \
+  --width 60 \
+  --height 36
+
+./scripts/compare_obs_heuristics.sh \
+  map/generated \
+  output/generated_obs_heuristic_compare.csv \
+  output/generated_obs_heuristic_compare_maps
+```
+
+`compare_obs_heuristics.sh` 会自动生成两个临时参数组：
+
+```text
+visibility_graph
+reverse_dijkstra
+```
+
+然后对 `map/generated` 下所有 JSON 地图分别运行 testbench。对比脚本会生成三份表格/报告文件：
+
+```text
+output/generated_obs_heuristic_compare.csv          # testbench 原始明细
+output/generated_obs_heuristic_compare_clean.csv    # 精简后的对比明细
+output/generated_obs_heuristic_compare_report.md    # 按启发式汇总的简单报告
+```
+
+报告包含每种障碍物启发式的运行次数、成功率、平均耗时、平均扩展节点数、平均迭代次数和失败地图列表。
+
+每次规划的路径 JSON 写入：
+
+```text
+output/generated_obs_heuristic_compare_maps/<heuristic_name>/<map_name>.json
+```
+
+查看对比输出路径：
+
+```bash
+./tool/view_path_json.sh output/generated_obs_heuristic_compare_maps/visibility_graph --list
+./tool/view_path_json.sh output/generated_obs_heuristic_compare_maps/reverse_dijkstra --list
 ```
 
 ### 批量实验 testbench

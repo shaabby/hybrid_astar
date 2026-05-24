@@ -60,7 +60,7 @@ cmake --build build --target hybrid_astar_testbench --config Release
 
 ## 测试地图生成
 
-`../scripts/generate_testbench_maps.py` 可以批量生成用于 testbench 的地图 JSON。
+`../scripts/generate_testbench_maps.py` 可以批量生成用于 testbench 的地图 JSON。脚本使用固定模板，不生成随机障碍物。
 
 生成默认尺寸地图：
 
@@ -68,8 +68,7 @@ cmake --build build --target hybrid_astar_testbench --config Release
 python3 scripts/generate_testbench_maps.py \
   --output-dir map/generated \
   --width 60 \
-  --height 36 \
-  --seed 42
+  --height 36
 ```
 
 生成多尺寸地图：
@@ -77,8 +76,7 @@ python3 scripts/generate_testbench_maps.py \
 ```bash
 python3 scripts/generate_testbench_maps.py \
   --output-dir map/generated \
-  --sizes 40x25 60x36 80x50 \
-  --seed 42
+  --sizes 40x25 60x36 80x50
 ```
 
 生成结果可以直接传给 testbench：
