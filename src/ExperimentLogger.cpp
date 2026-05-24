@@ -88,10 +88,14 @@ bool shouldWriteHeader(const std::filesystem::path& path) {
 void writeHeader(std::ofstream& output) {
     output
         << "timestamp,"
+        << "parameter_group,"
         << "map_path,"
         << "success,"
         << "path_poses,"
         << "expanded_nodes,"
+        << "iterations,"
+        << "generated_nodes,"
+        << "open_remaining,"
         << "runtime_ms,"
         << "start_x,"
         << "start_y,"
@@ -99,10 +103,14 @@ void writeHeader(std::ofstream& output) {
         << "goal_x,"
         << "goal_y,"
         << "goal_theta,"
+        << "max_iterations,"
+        << "theta_bins,"
         << "reverse_penalty,"
         << "steer_penalty,"
         << "gear_switch_penalty,"
         << "steer_change_penalty,"
+        << "analytic_expansion_distance,"
+        << "analytic_expansion_interval,"
         << "heuristic_name,"
         << "enable_obstacle_heuristic,"
         << "enable_analytic_expansion\n";
@@ -147,10 +155,14 @@ void ExperimentLogger::appendCsv(const std::filesystem::path& path,
     // 写入数据行
     output << std::fixed << std::setprecision(6)
            << timestampUtc() << ','
+           << csvEscape(entry.parameter_group) << ','
            << csvEscape(entry.map_path) << ','
            << (entry.success ? 1 : 0) << ','
            << entry.path_poses << ','
            << entry.expanded_nodes << ','
+           << entry.iterations << ','
+           << entry.generated_nodes << ','
+           << entry.open_remaining << ','
            << entry.runtime_ms << ','
            << start.x << ','
            << start.y << ','
@@ -158,10 +170,14 @@ void ExperimentLogger::appendCsv(const std::filesystem::path& path,
            << goal.x << ','
            << goal.y << ','
            << goal.theta << ','
+           << config.max_iterations << ','
+           << config.theta_bins << ','
            << config.reverse_penalty << ','
            << config.steer_penalty << ','
            << config.gear_switch_penalty << ','
            << config.steer_change_penalty << ','
+           << config.analytic_expansion_distance << ','
+           << config.analytic_expansion_interval << ','
            << csvEscape(entry.heuristic_name) << ','
            << (config.enable_obstacle_heuristic ? 1 : 0) << ','
            << (config.enable_analytic_expansion ? 1 : 0)

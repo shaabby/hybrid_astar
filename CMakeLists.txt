@@ -111,16 +111,40 @@ target_link_libraries(path_json_viewer
     fltk::fltk
 )
 
+add_executable(hybrid_astar_testbench
+    "${CMAKE_CURRENT_SOURCE_DIR}/tool/testbench.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/AppConfig.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Car.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CollisionChecker.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ExperimentLogger.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/GridMap.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Heuristic.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/HtmlWriter.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/HybridAstar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/JsonExporter.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/LineOfSight.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ReedsShepp.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp/OmplReedsShepp.cpp"
+)
+
+target_include_directories(hybrid_astar_testbench
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp"
+)
+
 if(MSVC)
     target_compile_options(hybrid_astar PRIVATE /W4)
     target_compile_options(reeds_shepp_empty_map_test PRIVATE /W4)
     target_compile_options(line_of_sight_test PRIVATE /W4)
     target_compile_options(app_config_test PRIVATE /W4)
     target_compile_options(path_json_viewer PRIVATE /W4)
+    target_compile_options(hybrid_astar_testbench PRIVATE /W4)
 else()
     target_compile_options(hybrid_astar PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(reeds_shepp_empty_map_test PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(line_of_sight_test PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(app_config_test PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(path_json_viewer PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(hybrid_astar_testbench PRIVATE -Wall -Wextra -Wpedantic)
 endif()

@@ -96,10 +96,14 @@ int main(int argc, char* argv[]) {
         std::filesystem::create_directories("output");
         debugStage("append experiment log");
         ExperimentLogEntry log_entry;
+        log_entry.parameter_group = "single";
         log_entry.map_path = app_config.map_path;
         log_entry.success = plan.success;
         log_entry.path_poses = plan.path.size();
         log_entry.expanded_nodes = plan.expanded.size();
+        log_entry.iterations = plan.iterations;
+        log_entry.generated_nodes = plan.generated_nodes;
+        log_entry.open_remaining = plan.open_remaining;
         log_entry.runtime_ms = std::chrono::duration<double, std::milli>(
             plan_end - plan_start).count();
         log_entry.heuristic_name = planner.heuristicName();

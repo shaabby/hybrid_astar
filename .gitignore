@@ -5,8 +5,7 @@ third_party/**/cmake-build-*/
 design.md
 help.md
 src/main
-output/demo.html
-output/result.json
-output/experiments.csv
-output/reeds_shepp_empty_map_test.json
+output/
+config/testbench/generated/
+config/testbench/generated_*/
 *.json
