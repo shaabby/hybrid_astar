@@ -1,235 +1,121 @@
-# Hybrid A* 路径规划最小闭环 Demo
+# Hybrid A* Demo
 
-本项目是一个 C++23 + FLTK 的 Hybrid A* 路径规划课堂展示 demo。
+一个基于 `C++23 + FLTK` 的 Hybrid A* 路径规划课程项目，包含：
 
-当前目标不是完整工业级规划器，而是先打通最小闭环：
+- JSON 栅格地图读取
+- 简化车辆 bicycle model
+- Hybrid A* 搜索
+- Reeds-Shepp 解析扩展
+- 路径 JSON 导出
+- FLTK 本地查看器
+- 批量实验与 CSV 日志
+
+典型流程：
 
 ```text
-Web 地图编辑器
-    ↓ 导出 JSON 地图
-C++ 读取地图
-    ↓ 构造 GridMap / Car
-Hybrid A* 生成车辆位姿序列
-    ↓ 输出 result.json
-FLTK 查看器渲染地图和小车运动
+地图 JSON -> C++ 规划 -> result.json / CSV -> FLTK 查看
 ```
 
-## 当前已完成
+## 目录
 
-已经完成最小可运行闭环：
+- `config/default.yaml`：默认运行配置
+- `map/`：地图与地图编辑器
+- `src/`、`include/`：核心实现
+- `tool/`：查看器与 testbench
+- `scripts/`：地图生成与实验脚本
+- `output/`：运行输出
 
-- `map/grid_demo.html`：浏览器中的方格地图编辑器；
-- `GridMap`：从 JSON 读取地图、起点、终点和障碍物；
-- `Car`：简化 bicycle model，小车以后轴中心为状态参考点；
-- `HybridAstar`：最小 Hybrid A* 核心搜索；
-- `JsonExporter`：输出 `map / vehicle / path / expanded`；
-- `FltkViewer`：显示规划结果、路径动画和车辆姿态；
-- `tool/path_json_viewer.cpp`：单独打开已导出的路径 JSON；
-- `tool/view_path_json.sh`：构建并打开单个路径 JSON，或按顺序打开目录下所有 JSON。
+## 快速开始
 
-当前默认地图可以规划成功，运行后会生成：
+推荐直接运行：
+
+```bash
+./run.sh
+```
+
+Windows 下可用：
+
+```bat
+run.bat
+```
+
+首次运行会自动配置并构建，默认执行：
+
+```text
+config/default.yaml
+```
+
+输出文件：
 
 ```text
 output/result.json
 output/single_run_timing.csv
 ```
 
-FLTK 查看器支持路径播放、暂停、步进和时间轴拖动。
-
-## 构建与运行
-
-推荐直接使用项目脚本：
-
-```bash
-./run.sh
-```
-
-脚本会在首次运行时配置 CMake，之后构建并运行默认配置：
-
-```text
-config/default.yaml
-```
-
-`run.sh` 默认把编译临时目录设置到 `build/tmp`。这样即使系统 `/tmp`
-空间不足，编译器生成的临时文件也会写在项目构建目录下。
-
-构建：
+手动构建：
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-手动运行默认配置：
+手动运行：
 
 ```bash
 ./build/hybrid_astar config/default.yaml
 ```
 
-默认配置会读取 `map/default_map.json`。规划完成后程序会生成
-`output/result.json` 和 `output/single_run_timing.csv`，并尝试打开 FLTK 动画窗口。
-
-只生成输出文件、不打开 FLTK 窗口：
+无图形环境下运行：
 
 ```bash
 ./build/hybrid_astar --no-view config/default.yaml
 ```
 
-`--html-only` 是 `--no-view` 的兼容别名。无桌面显示、SSH、容器或 CI
-环境下推荐使用这个模式，否则 FLTK 可能报 `Can't open display`。
+`--html-only` 是 `--no-view` 的兼容别名。
 
-指定其他配置：
+## 查看结果
 
-```bash
-./build/hybrid_astar config/other.yaml
-```
-
-查看已导出的路径 JSON：
+打开单个路径 JSON：
 
 ```bash
 ./tool/view_path_json.sh output/result.json
 ```
 
-查看目录下所有路径 JSON，脚本会按文件名排序逐个打开：
+Windows 下可用：
 
-```bash
-./tool/view_path_json.sh output/obs_heuristic_compare_maps/reverse_dijkstra
+```bat
+tool\view_path_json.bat output\result.json
 ```
 
-只列出 JSON 中包含的路径，不打开窗口：
+只列出路径，不打开窗口：
 
 ```bash
 ./tool/view_path_json.sh output/result.json --list
-./tool/view_path_json.sh output/obs_heuristic_compare_maps/reverse_dijkstra --list
 ```
 
-也可以直接调用查看器可执行文件：
+也可以直接运行查看器：
 
 ```bash
 ./build/path_json_viewer output/result.json
 ```
 
-路径 JSON 查看器默认只加载最终路径，不加载 `expanded` 搜索扩展节点，因此大规模实验输出也可以快速打开。
+## 测试
 
-每次运行还会追加一行简要实验日志：
-
-```text
-output/single_run_timing.csv
-```
-
-日志包含地图路径、是否成功、路径点数量、扩展节点数量、规划耗时、起终点位姿、主要代价参数和启发式名称，方便对比不同参数或地图下的规划效果。
-
-如果配置中开启：
-
-```yaml
-hybrid_astar:
-  enable_timing: true
-```
-
-CSV 还会写入细分计时列，用于分析性能瓶颈：
-
-- `heuristic_prepare_ms`：启发式预处理总耗时；
-- `search_loop_ms`：Hybrid A* 主搜索循环耗时；
-- `obstacle_collect_ms`、`visibility_points_ms`、`visibility_graph_ms`、`visibility_dijkstra_ms`、`obstacle_lookup_ms`：`visibility_graph` 障碍物启发式预计算各阶段耗时；
-- `reverse_dijkstra_inflation_ms`、`reverse_dijkstra_ms`：`reverse_dijkstra` 障碍物膨胀和反向 Dijkstra 耗时；
-- `non_obstacle_heuristic_ms`、`obstacle_heuristic_ms`、`heuristic_estimate_calls`：搜索中两种启发式估价耗时和调用次数；
-- `primitive_collision_check_ms`、`primitive_collision_check_calls`：运动基元碰撞检测耗时和调用次数；
-- `analytic_expansion_ms`、`analytic_attempts`、`analytic_successes`：Reeds-Shepp 解析直连尝试耗时、次数和成功次数；
-- `analytic_rs_generation_ms`、`analytic_rs_generation_calls`、`analytic_collision_check_ms`、`analytic_collision_check_calls`：解析直连中的曲线生成和碰撞检测细分统计。
-
-关闭 `enable_timing` 时，上述细分计时列保留但值为 0，外层 `runtime_ms` 仍会记录。
-
-障碍物启发式算法由 `obstacle_heuristic_type` 选择：
-
-- `visibility_graph`：当前默认算法，使用障碍边界可视点、line-of-sight 可视图和查表估价；
-- `reverse_dijkstra`：旧版反向 Dijkstra 算法，先按 `obstacle_heuristic_inflation_alpha * vehicle.width / 2` 膨胀障碍物，再从目标格反向计算 8 邻域 cost-to-go。
-
-`obstacle_heuristic_inflation_alpha` 只影响 `reverse_dijkstra`，`0` 表示不膨胀，`1` 表示按车辆半宽膨胀。
-
-### 生成测试地图
-
-生成一组固定尺寸的测试地图：
+运行单元测试：
 
 ```bash
-python3 scripts/generate_testbench_maps.py \
-  --output-dir map/generated \
-  --width 60 \
-  --height 36
+ctest --test-dir build --output-on-failure
 ```
 
-生成多种尺寸的测试地图：
+当前主要测试包括：
 
-```bash
-python3 scripts/generate_testbench_maps.py \
-  --output-dir map/generated \
-  --sizes 40x25 60x36 80x50
-```
+- `reeds_shepp_empty_map_test`
+- `line_of_sight_test`
+- `app_config_test`
 
-脚本使用固定模板生成 `empty`、`simple`、`narrow`、`reverse`、`u`、`unreach` 等类别地图，并写出 `maps.txt` 作为索引；不会使用随机障碍物。`testbench` 不需要读取索引文件，直接把输出目录传给 `--maps` 即可：
+## 批量实验
 
-```bash
-./build/hybrid_astar_testbench \
-  --groups config/testbench/default_groups.txt \
-  --maps map/generated \
-  --output output/generated_maps_timing.csv \
-  --output-map-dir output/generated_maps_results
-```
-
-使用生成地图对比两种障碍物启发式：
-
-```bash
-python3 scripts/generate_testbench_maps.py \
-  --output-dir map/generated \
-  --width 60 \
-  --height 36
-
-./scripts/compare_obs_heuristics.sh \
-  map/generated \
-  output/generated_obs_heuristic_compare.csv \
-  output/generated_obs_heuristic_compare_maps
-```
-
-`compare_obs_heuristics.sh` 会自动生成两个临时参数组：
-
-```text
-visibility_graph
-reverse_dijkstra
-```
-
-然后对 `map/generated` 下所有 JSON 地图分别运行 testbench。对比脚本会生成三份表格/报告文件：
-
-```text
-output/generated_obs_heuristic_compare.csv          # testbench 原始明细
-output/generated_obs_heuristic_compare_clean.csv    # 精简后的对比明细
-output/generated_obs_heuristic_compare_report.md    # 按启发式汇总的简单报告
-```
-
-报告包含每种障碍物启发式的运行次数、成功率、平均耗时、平均扩展节点数、平均迭代次数、失败地图列表，以及 `visibility_graph` 相比 `reverse_dijkstra` 的成功率差异、平均耗时降低比例、扩展节点降低比例和迭代数降低比例。
-
-注意：脚本每次运行会先删除同名旧结果文件，再重新生成 `csv / clean.csv / report.md`，避免 `ExperimentLogger` 追加写入导致统计混入旧结果。
-
-每次规划的路径 JSON 写入：
-
-```text
-output/generated_obs_heuristic_compare_maps/<heuristic_name>/<map_name>.json
-```
-
-查看对比输出路径：
-
-```bash
-./tool/view_path_json.sh output/generated_obs_heuristic_compare_maps/visibility_graph --list
-./tool/view_path_json.sh output/generated_obs_heuristic_compare_maps/reverse_dijkstra --list
-```
-
-### 批量实验 testbench
-
-构建 testbench：
-
-```bash
-TMPDIR="$PWD/build/tmp" cmake --build build --target hybrid_astar_testbench --config Release
-```
-
-运行默认参数组和 `map/` 下所有地图：
+运行默认参数组的 testbench：
 
 ```bash
 ./build/hybrid_astar_testbench \
@@ -241,162 +127,95 @@ TMPDIR="$PWD/build/tmp" cmake --build build --target hybrid_astar_testbench --co
 
 常用参数：
 
-- `--groups`：参数组列表，每行格式为 `组名 配置文件路径`；
-- `--maps`：包含 `.json` 地图文件的目录；
-- `--output`：实验 CSV 输出路径；
-- `--output-map-dir`：每次规划的 JSON 路径输出目录。
+- `--groups`：参数组列表
+- `--maps`：地图目录
+- `--output`：CSV 输出
+- `--output-map-dir`：每次规划的 JSON 输出目录
 
-例如只跑自动生成的多组参数：
+## 生成测试地图
 
-```bash
-./build/hybrid_astar_testbench \
-  --groups config/testbench/generated/groups.txt \
-  --maps map \
-  --output output/generated_timing.csv \
-  --output-map-dir output/generated_timing_maps
-```
-
-如果系统 `/tmp` 空间不足，和普通构建一样在命令前加：
+生成多尺寸固定模板地图：
 
 ```bash
-TMPDIR="$PWD/build/tmp"
+python3 scripts/generate_testbench_maps.py \
+  --output-dir map/generated \
+  --sizes 40x25 60x36 80x50
 ```
 
-配置文件基本格式见 `config/default.yaml`：
+脚本会生成 `empty`、`simple`、`narrow`、`reverse`、`u`、`unreach` 等地图。
 
-```yaml
-map_path: map/default_map.json
+## 障碍物启发式对比
 
-vehicle:
-  length: 4.5
-  width: 2.0
-  wheelbase: 2.7
-  rear_to_center: 1.35
-  max_steer: 0.61
+对比 `visibility_graph` 和 `reverse_dijkstra`：
 
-hybrid_astar:
-  xy_resolution: 1.0
-  theta_bins: 360
-  step_size: 0.2
-  primitive_length: 1.2
-  goal_xy_tolerance: 0.2
-  goal_theta_tolerance: 0.05
-  reverse_penalty: 2.0
-  steer_penalty: 1.0
-  gear_switch_penalty: 1.0
-  steer_change_penalty: 1.0
-  max_iterations: 120000
-  allow_reverse: true
-  enable_analytic_expansion: true
-  analytic_expansion_distance: 30.0
-  analytic_expansion_interval: 25
-  collision_safety_margin: 0.0
-  enable_obstacle_heuristic: true
-  obstacle_lookup_resolution: 1.0
-  obstacle_heuristic_type: visibility_graph
-  obstacle_heuristic_inflation_alpha: 1.0
-  enable_timing: true
-  debug: true
-  debug_progress_interval: 500
+```bash
+./scripts/compare_obs_heuristics.sh \
+  map/generated \
+  output/generated_obs_heuristic_compare.csv \
+  output/generated_obs_heuristic_compare_maps
 ```
 
-Windows 使用 Visual Studio 生成器时，可执行文件通常在：
+输出：
 
 ```text
-build/Release/hybrid_astar.exe
+output/generated_obs_heuristic_compare.csv
+output/generated_obs_heuristic_compare_clean.csv
+output/generated_obs_heuristic_compare_report.md
 ```
 
-### 常见运行问题
+## 配置说明
 
-如果编译时报：
+主配置见 `config/default.yaml`，核心项包括：
 
-```text
-fatal error: error writing to /tmp/...: No space left on device
-```
+- `map_path`：地图文件
+- `vehicle.*`：车辆尺寸和最大转向角
+- `xy_resolution`、`theta_bins`：状态离散精度
+- `step_size`、`primitive_length`：运动基元长度
+- `max_iterations`：最大搜索迭代数
+- `enable_analytic_expansion`：是否启用 Reeds-Shepp 直连
+- `enable_obstacle_heuristic`：是否启用障碍物启发式
+- `obstacle_heuristic_type`：`visibility_graph` 或 `reverse_dijkstra`
+- `enable_timing`：是否写细分计时
+- `debug`：是否输出调试日志
 
-说明系统临时目录所在分区空间不足。优先使用 `./run.sh`，它会自动使用
-`build/tmp` 作为临时目录。手动构建时也可以显式指定：
+说明：
 
-```bash
-TMPDIR="$PWD/build/tmp" cmake --build build --config Release
-```
-
-如果运行结束时报：
-
-```text
-Can't open display: :0
-```
-
-说明当前环境没有可用图形显示。规划结果 JSON 通常已经写出，可以改用：
-
-```bash
-./build/hybrid_astar --no-view config/default.yaml
-```
+- `visibility_graph` 是当前默认障碍物启发式。
+- `obstacle_heuristic_inflation_alpha` 只影响 `reverse_dijkstra`。
 
 ## 地图编辑
 
-打开：
+浏览器打开：
 
 ```text
 map/grid_demo.html
 ```
 
-可以在浏览器中：
+可用于编辑障碍物、起点、终点和朝向，并导出 JSON 地图。
 
-- 点击方格添加或删除障碍物；
-- 设置起点；
-- 设置终点；
-- 设置起点/终点朝向；
-- 导出 JSON 地图。
+## 常见问题
 
-地图 JSON 基本格式：
+`/tmp` 空间不足：
 
-```json
-{
-  "version": 1,
-  "width": 60,
-  "height": 36,
-  "start": {"x": 6, "y": 6, "theta": 0.0},
-  "goal": {"x": 52, "y": 28, "theta": 0.0},
-  "obstacles": [
-    {"x": 12, "y": 12}
-  ]
-}
+```bash
+TMPDIR="$PWD/build/tmp" cmake --build build --config Release
 ```
 
-`theta` 使用弧度。`obstacles` 使用栅格坐标。
+无图形显示：
 
-## 车辆模型
+```bash
+./build/hybrid_astar --no-view config/default.yaml
+```
 
-当前采用简化 bicycle model：
+Windows 原生环境下，可执行文件通常在：
 
 ```text
-x, y   = 后轴中心
-theta  = 车身朝向
-steer  = 前轮转向角
+build/Release/hybrid_astar.exe
 ```
 
-每个小步使用后轴中心弧长 `ds`：
+如果使用本项目附带的批处理脚本，则入口分别为：
 
 ```text
-kappa = tan(steer) / wheelbase
-
-x_next     = x + direction * ds * cos(theta)
-y_next     = y + direction * ds * sin(theta)
-theta_next = theta + direction * ds * kappa
+run.bat
+tool\view_path_json.bat
 ```
-
-动作集合是 6 个 motion primitives：
-
-```text
-前进左转 / 前进直行 / 前进右转
-倒车左转 / 倒车直行 / 倒车右转
-```
-
-也就是：
-
-```text
-direction ∈ {+1, -1}
-steer ∈ {-max_steer, 0, +max_steer}
-```
-

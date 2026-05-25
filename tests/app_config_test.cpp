@@ -10,10 +10,10 @@
 
 namespace {
 
-std::filesystem::path testTempDirectory() {
+const std::filesystem::path& testTempDirectory() {
     static const std::filesystem::path directory = [] {
         const std::filesystem::path base =
-            std::filesystem::temp_directory_path() / "hybrid_astar_app_config_test";
+            std::filesystem::current_path() / "build" / "app_config_test_tmp";
         std::filesystem::remove_all(base);
         std::filesystem::create_directories(base);
         return base;
@@ -22,9 +22,11 @@ std::filesystem::path testTempDirectory() {
 }
 
 struct TempDirectoryCleanup {
+    std::filesystem::path directory = testTempDirectory();
+
     ~TempDirectoryCleanup() {
         std::error_code error;
-        std::filesystem::remove_all(testTempDirectory(), error);
+        std::filesystem::remove_all(directory, error);
     }
 };
 
