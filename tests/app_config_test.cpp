@@ -10,6 +10,26 @@
 
 namespace {
 
+std::filesystem::path testTempDirectory() {
+    static const std::filesystem::path directory = [] {
+        const std::filesystem::path base =
+            std::filesystem::temp_directory_path() / "hybrid_astar_app_config_test";
+        std::filesystem::remove_all(base);
+        std::filesystem::create_directories(base);
+        return base;
+    }();
+    return directory;
+}
+
+struct TempDirectoryCleanup {
+    ~TempDirectoryCleanup() {
+        std::error_code error;
+        std::filesystem::remove_all(testTempDirectory(), error);
+    }
+};
+
+TempDirectoryCleanup g_temp_directory_cleanup;
+
 class TestRunner {
 public:
     void expect(bool condition, std::string_view message) {
@@ -50,8 +70,7 @@ void writeTextFile(const std::filesystem::path& path, std::string_view text) {
 }
 
 std::filesystem::path writeConfig(std::string_view name, std::string_view text) {
-    const std::filesystem::path directory =
-        std::filesystem::current_path() / "app_config_test_tmp";
+    const std::filesystem::path directory = testTempDirectory();
     std::filesystem::create_directories(directory);
     const std::filesystem::path path = directory / std::string(name);
     writeTextFile(path, text);
