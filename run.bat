@@ -4,7 +4,6 @@ setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 set "BUILD_DIR=%SCRIPT_DIR%build"
 set "CMAKE_DIR=%SCRIPT_DIR%cmake\bin"
-set "MAKE=mingw32-make.exe"
 set "BUILD_TYPE=Release"
 set "EXECUTABLE=%BUILD_DIR%\hybrid_astar.exe"
 
@@ -18,7 +17,7 @@ if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 
 if not exist "%BUILD_DIR%\CMakeCache.txt" (
     echo [run] Configuring CMake ^(%BUILD_TYPE%^)...
-    "%CMAKE_DIR%\cmake.exe" -B "%BUILD_DIR%" -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+    "%CMAKE_DIR%\cmake.exe" -S "%SCRIPT_DIR%" -B "%BUILD_DIR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
     if errorlevel 1 (
         echo CMake configuration failed
         exit /b 1
@@ -26,7 +25,7 @@ if not exist "%BUILD_DIR%\CMakeCache.txt" (
 )
 
 echo [run] Building hybrid_astar...
-%MAKE% -C "%BUILD_DIR%"
+"%CMAKE_DIR%\cmake.exe" --build "%BUILD_DIR%" --config %BUILD_TYPE% --target hybrid_astar
 if errorlevel 1 (
     echo Build failed
     exit /b 1

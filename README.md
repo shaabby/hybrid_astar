@@ -219,3 +219,5 @@ build/Release/hybrid_astar.exe
 run.bat
 tool\view_path_json.bat
 ```
+
+这些脚本统一通过 `cmake --build` 调用当前生成器，因而比直接写死 `mingw32-make` 更兼容不同 Windows 构建环境。

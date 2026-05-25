@@ -5,7 +5,6 @@ set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
 set "BUILD_DIR=%ROOT_DIR%\build"
 set "CMAKE_DIR=%ROOT_DIR%\cmake\bin"
-set "MAKE=mingw32-make.exe"
 set "BUILD_TYPE=Release"
 set "EXECUTABLE=%BUILD_DIR%\path_json_viewer.exe"
 set "TARGET=output\result.json"
@@ -43,7 +42,7 @@ pushd "%ROOT_DIR%" >nul
 
 if not exist "%BUILD_DIR%\CMakeCache.txt" (
     echo [view-path] Configuring CMake ^(%BUILD_TYPE%^)...
-    "%CMAKE_DIR%\cmake.exe" -B "%BUILD_DIR%" -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+    "%CMAKE_DIR%\cmake.exe" -S "%ROOT_DIR%" -B "%BUILD_DIR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
     if errorlevel 1 (
         popd >nul
         echo CMake configuration failed
@@ -52,7 +51,7 @@ if not exist "%BUILD_DIR%\CMakeCache.txt" (
 )
 
 echo [view-path] Building path_json_viewer...
-%MAKE% -C "%BUILD_DIR%" path_json_viewer
+"%CMAKE_DIR%\cmake.exe" --build "%BUILD_DIR%" --config %BUILD_TYPE% --target path_json_viewer
 if errorlevel 1 (
     popd >nul
     echo Build failed
