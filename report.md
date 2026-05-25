@@ -113,6 +113,8 @@ final/
 
 ### 2.3 Hybrid A* 算法原理
 
+https://github.com/zhm-real/PathPlanning
+
 Hybrid A* 可以看成“普通 A* 在车辆运动学约束下的扩展版本”。普通 A* 通常把状态定义为二维栅格点，扩展方式是上下左右或八邻域移动；而 Hybrid A* 的状态必须包含车辆朝向，因此搜索空间变成 \((x, y, \theta)\)。这意味着算法不仅要回答“车能不能到某个位置”，还要回答“车能不能以合适的姿态到达该位置”。
 
 #### 2.3.1 状态表示
@@ -636,6 +638,142 @@ hybrid_astar:
 
 综合这次真正的运行时间测试，可以得到更可靠的结论：在默认参数组和 `map/` 测试集上，程序的主要耗时仍集中在 Hybrid A* 主搜索循环，而其中运动基元相关的碰撞检测是重要开销来源之一；解析扩展存在一定开销，但不是这组批量实验下的首要瓶颈。后续如果要继续优化运行时间，更合理的方向是减少无效节点生成、改进 primitive 级碰撞检测效率、调整状态离散精度，或者进一步增强启发式指导性以降低扩展节点数。
 
+### 5.11 本地实验：惩罚参数配置对比
+
+为了分析代价函数中若干惩罚项对搜索行为的影响，本次进一步使用 `hybrid_astar_testbench` 做了一个四参数组合实验。实验关注以下参数：
+
+- `reverse_penalty`：`5.0 / 2 / 1`
+- `steer_penalty`：`0.5 / 1 / 2`
+- `gear_switch_penalty`：`1 / 2 / 5`
+- `steer_change_penalty`：`0.5 / 1 / 2`
+
+四个参数各取 3 个值，因此总共有：
+
+\[
+3^4 = 81
+\]
+
+组参数组合。
+
+实验命令如下：
+
+```bash
+./build/hybrid_astar_testbench \
+  --base-config config/default.yaml \
+  --param hybrid_astar.debug=false \
+  --param hybrid_astar.reverse_penalty=5.0,2,1 \
+  --param hybrid_astar.steer_penalty=0.5,1,2 \
+  --param hybrid_astar.gear_switch_penalty=1,2,5 \
+  --param hybrid_astar.steer_change_penalty=0.5,1,2 \
+  --maps map \
+  --output output/penalty_sweep.csv \
+  --output-map-dir output/penalty_sweep_maps
+```
+
+实验环境说明如下：
+
+- 代码版本：当前仓库工作区中的本地版本。
+- 构建方式：`cmake --build build --config Release`，即 Release 构建。
+- 操作系统环境：本地 Linux 命令行环境。
+- 地图集合：`map/` 目录下的 14 张测试地图。
+- 基础配置：`config/default.yaml`。
+- 额外设置：为了避免调试输出干扰时间统计，实验中固定 `hybrid_astar.debug=false`。
+
+实验原始结果写入：
+
+- `output/penalty_sweep.csv`
+- `output/penalty_sweep_maps/`
+
+为便于统计，本次又将结果清洗为：
+
+- `output/penalty_sweep_clean.csv`
+- `output/penalty_sweep_report.md`
+
+由于共有 81 组参数、每组 14 张地图，因此总运行次数为：
+
+\[
+81 \times 14 = 1134
+\]
+
+本次实验的一个显著现象是：所有参数组合的成功率都相同，均为 `13/14 = 92.86%`。唯一始终失败的地图是 `unreach01.json`，这与其本身不可达的性质一致。因此，这组实验的比较重点不是成功率，而是成功样例上的平均运行时间、扩展节点数和搜索规模。
+
+按单个参数取值分别汇总成功样例的平均结果，可得到下表。
+
+#### 5.11.1 `reverse_penalty` 的影响
+
+| 值 | 平均成功率 | 成功样例平均运行时间/ms | 成功样例平均扩展节点数 |
+|---|---:|---:|---:|
+| `1` | `92.86%` | `117.846` | `9183.2` |
+| `2` | `92.86%` | `92.216` | `7768.6` |
+| `5.0` | `92.86%` | `78.893` | `6002.5` |
+
+可以看出，较大的 `reverse_penalty` 能显著减少扩展节点和运行时间。这说明在本项目当前地图集上，过于便宜的倒车动作会使搜索更容易在局部产生大量尝试；适当提高倒车代价，反而能让搜索更集中。
+
+#### 5.11.2 `steer_penalty` 的影响
+
+| 值 | 平均成功率 | 成功样例平均运行时间/ms | 成功样例平均扩展节点数 |
+|---|---:|---:|---:|
+| `0.5` | `92.86%` | `82.797` | `6247.4` |
+| `1` | `92.86%` | `93.064` | `7412.9` |
+| `2` | `92.86%` | `113.095` | `9293.9` |
+
+这里的趋势也比较明显：`steer_penalty` 越大，搜索效率越差。原因在于过强的转向惩罚会让搜索对可行机动动作更保守，尤其在需要频繁调整姿态的地图上，会增加无效扩展。
+
+#### 5.11.3 `gear_switch_penalty` 的影响
+
+| 值 | 平均成功率 | 成功样例平均运行时间/ms | 成功样例平均扩展节点数 |
+|---|---:|---:|---:|
+| `1` | `92.86%` | `105.221` | `8512.0` |
+| `2` | `92.86%` | `98.905` | `7868.6` |
+| `5` | `92.86%` | `84.829` | `6573.7` |
+
+换挡惩罚越大，平均效果越好。这说明“前进/倒车频繁切换”在本项目当前实现中通常会带来更多无效搜索；提高 `gear_switch_penalty` 有利于抑制这种来回切换。
+
+#### 5.11.4 `steer_change_penalty` 的影响
+
+| 值 | 平均成功率 | 成功样例平均运行时间/ms | 成功样例平均扩展节点数 |
+|---|---:|---:|---:|
+| `0.5` | `92.86%` | `87.985` | `6875.3` |
+| `1` | `92.86%` | `93.062` | `7442.0` |
+| `2` | `92.86%` | `107.909` | `8637.0` |
+
+`steer_change_penalty` 过大同样会拖慢搜索。较小的转向变化惩罚既不会让路径过分抖动，又能保留必要的姿态调整自由度。
+
+#### 5.11.5 最优组合
+
+在 81 组组合中，表现最好的几组都具有相似特征：较大的 `reverse_penalty`、较小的 `steer_penalty`、较大的 `gear_switch_penalty`，以及较小的 `steer_change_penalty`。
+
+本次实验中成功样例平均运行时间最优的组合为：
+
+- `reverse_penalty = 5.0`
+- `steer_penalty = 0.5`
+- `gear_switch_penalty = 5`
+- `steer_change_penalty = 0.5`
+
+该组合的统计结果为：
+
+- 成功率：`92.86%`
+- 成功样例平均运行时间：`58.986 ms`
+- 成功样例平均扩展节点数：`3949.7`
+
+这说明在本项目当前实现和测试地图上，一个“明显抑制倒车、抑制频繁换挡、但不过度抑制转向和转向变化”的代价设置，更有利于提升 Hybrid A* 的实际搜索效率。
+
+综合这组实验，可以得到如下结论：
+
+1. `reverse_penalty` 应偏大，`5.0` 明显优于 `2` 和 `1`。
+2. `steer_penalty` 应偏小，`0.5` 最优。
+3. `gear_switch_penalty` 应偏大，`5` 最优。
+4. `steer_change_penalty` 不宜过大，`0.5` 效果最好。
+
+因此，如果后续要为本项目当前地图集选择更高效的默认惩罚参数，一个合理的经验方向是：
+
+```yaml
+reverse_penalty: 5.0
+steer_penalty: 0.5
+gear_switch_penalty: 5
+steer_change_penalty: 0.5
+```
+
 ---
 
 ## 6. 学习心得和收获
@@ -658,16 +796,8 @@ hybrid_astar:
 
 ---
 
-## 7. 参考文献
+## 7. 参考资料
 
-[1] Hart, P. E., Nilsson, N. J., & Raphael, B. (1968). A Formal Basis for the Heuristic Determination of Minimum Cost Paths. *IEEE Transactions on Systems Science and Cybernetics*, 4(2), 100-107.
+[1] Dolgov D, Thrun S, Montemerlo M, et al. Practical Search Techniques in Path Planning for Autonomous Driving[C] 2008.
 
-[2] Dolgov, D., Thrun, S., Montemerlo, M., & Diebel, J. (2010). Path Planning for Autonomous Vehicles in Unknown Semi-structured Environments. *The International Journal of Robotics Research*, 29(5), 485-501.
-
-[3] Reeds, J. A., & Shepp, L. A. (1990). Optimal Paths for a Car That Goes Both Forwards and Backwards. *Pacific Journal of Mathematics*, 145(2), 367-393.
-
-[4] LaValle, S. M. (2006). *Planning Algorithms*. Cambridge University Press.
-
-[5] Thrun, S., Burgard, W., & Fox, D. (2005). *Probabilistic Robotics*. MIT Press.
-
-[6] Siegwart, R., Nourbakhsh, I. R., & Scaramuzza, D. (2011). *Introduction to Autonomous Mobile Robots* (2nd ed.). MIT Press.
+[2] https://github.com/zhm-real/PathPlanning

@@ -58,6 +58,21 @@ cmake --build build --target hybrid_astar_testbench --config Release
   --output-map-dir output/generated_timing_maps
 ```
 
+也可以不预先生成 YAML，而是直接从一个基础配置做任意参数组合实验：
+
+```bash
+./build/hybrid_astar_testbench \
+  --base-config config/default.yaml \
+  --param hybrid_astar.xy_resolution=0.1,0.5,1 \
+  --param hybrid_astar.step_size=0.1,0.5,1 \
+  --param hybrid_astar.primitive_length=0.2,0.5,1 \
+  --maps map/empty01_only \
+  --output output/param_sweep.csv \
+  --output-map-dir output/param_sweep_maps
+```
+
+`--param` 可以重复指定；testbench 会自动对这些参数取笛卡尔积，生成所有组合并批量运行。
+
 ## 测试地图生成
 
 `../scripts/generate_testbench_maps.py` 可以批量生成用于 testbench 的地图 JSON。脚本使用固定模板，不生成随机障碍物。

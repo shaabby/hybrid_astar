@@ -11,10 +11,10 @@ vehicle:
 
 # Hybrid A* 路径规划器参数。
 hybrid_astar:
-  xy_resolution: 0.1                    # x/y 位置离散分辨率，用于搜索节点去重。
+  xy_resolution: 0.5                    # x/y 位置离散分辨率，用于搜索节点去重。
   theta_bins: 72                       # 航向角离散分箱数，数值越大角度状态越细。
-  step_size: 0.1                        # 车辆运动学前向积分步长。
-  primitive_length: 0.2                 # 每个运动基元的模拟长度。
+  step_size: 0.5                        # 车辆运动学前向积分步长。
+  primitive_length: 1                 # 每个运动基元的模拟长度。
   goal_xy_tolerance: 1                # 到达目标的位置容差。
   goal_theta_tolerance: 0.1            # 到达目标的航向角容差，单位为弧度。
   reverse_penalty: 5.0                  # 倒车行驶的代价倍率。

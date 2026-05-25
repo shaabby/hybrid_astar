@@ -141,9 +141,26 @@ ctest --test-dir build --output-on-failure
 常用参数：
 
 - `--groups`：参数组列表
+- `--base-config`：基础配置文件，用于直接生成参数组合实验
+- `--param`：参数扫描定义，格式为 `key=v1,v2,...`，可重复指定
 - `--maps`：地图目录
 - `--output`：CSV 输出
 - `--output-map-dir`：每次规划的 JSON 输出目录
+
+除了读取现成参数组文件外，`testbench` 也支持直接做任意参数组合实验。例如：
+
+```bash
+./build/hybrid_astar_testbench \
+  --base-config config/default.yaml \
+  --param hybrid_astar.xy_resolution=0.1,0.5,1 \
+  --param hybrid_astar.step_size=0.1,0.5,1 \
+  --param hybrid_astar.primitive_length=0.2,0.5,1 \
+  --maps map \
+  --output output/param_sweep.csv \
+  --output-map-dir output/param_sweep_maps
+```
+
+这会自动生成参数笛卡尔积，并将每组结果写入同一个 CSV 与输出目录。
 
 Windows 下也提供了现成脚本：
 
