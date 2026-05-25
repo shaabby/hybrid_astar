@@ -45,6 +45,12 @@ run.bat
 demo.bat
 ```
 
+如果要在 `empty01` 地图上对比三组搜索离散参数，并依次打开结果，可运行：
+
+```bat
+demo_para.bat
+```
+
 首次运行会自动配置并构建，默认执行：
 
 ```text
@@ -137,6 +143,33 @@ ctest --test-dir build --output-on-failure
 - `--maps`：地图目录
 - `--output`：CSV 输出
 - `--output-map-dir`：每次规划的 JSON 输出目录
+
+Windows 下也提供了现成脚本：
+
+```bat
+demo.bat
+```
+
+它会使用 `config/testbench/default_groups.txt` 批量运行 `map\` 目录下已有地图，并打开 `output\demo\default\` 中的结果。
+
+另一个参数对比脚本：
+
+```bat
+demo_para.bat
+```
+
+它会只运行 `map\empty01.json`，并比较以下三组参数：
+
+- `xy_resolution=0.1`，`step_size=0.1`，`primitive_length=0.2`
+- `xy_resolution=0.5`，`step_size=0.5`，`primitive_length=0.5`
+- `xy_resolution=1`，`step_size=1`，`primitive_length=1`
+
+对应输出：
+
+```text
+output/demo_para.csv
+output/demo_para/
+```
 
 ## 生成测试地图
 
