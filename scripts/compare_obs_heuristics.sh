@@ -14,6 +14,7 @@ REPORT_MD="${OUTPUT_CSV%.csv}_report.md"
 
 cd "${ROOT_DIR}"
 mkdir -p "${TMPDIR}" "${WORK_DIR}"
+rm -f "${OUTPUT_CSV}" "${CLEAN_CSV}" "${REPORT_MD}"
 export TMPDIR
 
 if [[ ! -f "${BUILD_DIR}/CMakeCache.txt" ]]; then
@@ -137,6 +138,22 @@ by_heuristic = defaultdict(list)
 for row in clean_rows:
     by_heuristic[row["heuristic"]].append(row)
 
+summary = {}
+for heuristic in sorted(by_heuristic):
+    group = by_heuristic[heuristic]
+    runs = len(group)
+    successes = sum(1 for row in group if row.get("success") == "1")
+    success_rate = successes / runs if runs else 0.0
+    summary[heuristic] = {
+        "runs": runs,
+        "successes": successes,
+        "success_rate": success_rate,
+        "avg_runtime_ms": mean([number(row, "runtime_ms") for row in group]),
+        "avg_expanded": mean([number(row, "expanded_nodes") for row in group]),
+        "avg_iterations": mean([number(row, "iterations") for row in group]),
+        "avg_path_poses": mean([number(row, "path_poses") for row in group]),
+    }
+
 report_lines = [
     "# Obstacle Heuristic Compare Report",
     "",
@@ -149,18 +166,41 @@ report_lines = [
     "|---|---:|---:|---:|---:|---:|---:|---:|",
 ]
 
-for heuristic in sorted(by_heuristic):
-    group = by_heuristic[heuristic]
-    runs = len(group)
-    successes = sum(1 for row in group if row.get("success") == "1")
-    success_rate = successes / runs if runs else 0.0
+for heuristic, values in summary.items():
     report_lines.append(
-        f"| {heuristic} | {runs} | {successes} | {success_rate:.2%} | "
-        f"{mean([number(row, 'runtime_ms') for row in group]):.3f} | "
-        f"{mean([number(row, 'expanded_nodes') for row in group]):.1f} | "
-        f"{mean([number(row, 'iterations') for row in group]):.1f} | "
-        f"{mean([number(row, 'path_poses') for row in group]):.1f} |"
+        f"| {heuristic} | {values['runs']} | {values['successes']} | {values['success_rate']:.2%} | "
+        f"{values['avg_runtime_ms']:.3f} | "
+        f"{values['avg_expanded']:.1f} | "
+        f"{values['avg_iterations']:.1f} | "
+        f"{values['avg_path_poses']:.1f} |"
     )
+
+report_lines.extend(["", "## Conclusion", ""])
+if len(summary) >= 2:
+    best_success = max(summary, key=lambda name: (summary[name]["success_rate"], -summary[name]["avg_runtime_ms"]))
+    best_runtime = min(summary, key=lambda name: summary[name]["avg_runtime_ms"])
+    best_expanded = min(summary, key=lambda name: summary[name]["avg_expanded"])
+    report_lines.append(f"- Best success rate: `{best_success}` ({summary[best_success]['success_rate']:.2%}).")
+    report_lines.append(f"- Lowest average runtime: `{best_runtime}` ({summary[best_runtime]['avg_runtime_ms']:.3f} ms).")
+    report_lines.append(f"- Lowest average expanded nodes: `{best_expanded}` ({summary[best_expanded]['avg_expanded']:.1f}).")
+
+    if "visibility_graph" in summary and "reverse_dijkstra" in summary:
+        vg = summary["visibility_graph"]
+        rd = summary["reverse_dijkstra"]
+        runtime_gain = (rd["avg_runtime_ms"] - vg["avg_runtime_ms"]) / rd["avg_runtime_ms"] if rd["avg_runtime_ms"] else 0.0
+        expanded_gain = (rd["avg_expanded"] - vg["avg_expanded"]) / rd["avg_expanded"] if rd["avg_expanded"] else 0.0
+        iteration_gain = (rd["avg_iterations"] - vg["avg_iterations"]) / rd["avg_iterations"] if rd["avg_iterations"] else 0.0
+        success_delta = vg["success_rate"] - rd["success_rate"]
+        report_lines.extend([
+            "",
+            "Compared with `reverse_dijkstra`, `visibility_graph` has:",
+            f"- Success-rate delta: {success_delta:+.2%}.",
+            f"- Average runtime reduction: {runtime_gain:.2%}.",
+            f"- Average expanded-node reduction: {expanded_gain:.2%}.",
+            f"- Average iteration reduction: {iteration_gain:.2%}.",
+        ])
+else:
+    report_lines.append("Need at least two heuristic groups for comparison.")
 
 report_lines.extend([
     "",

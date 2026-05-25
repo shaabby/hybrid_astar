@@ -76,7 +76,7 @@ def clear_rect(obstacles, width, height, x, y, w, h):
             obstacles.discard((xx, yy))
 
 
-def clear_pose_area(obstacles, width, height, p, radius=2):
+def clear_pose_area(obstacles, width, height, p, radius=3):
     cx = int(round(p["x"]))
     cy = int(round(p["y"]))
     for yy in range(cy - radius, cy + radius + 1):
@@ -190,15 +190,15 @@ def u_maps(width, height):
     specs = [
         (
             "u01",
-            (11, 18, 0.0),
-            (49, 18, 3.141593),
-            [(18, 8, 4, 20), (18, 8, 24, 4), (18, 24, 24, 4), (42, 8, 4, 20)],
+            (8, 18, 0.0),
+            (52, 18, 3.141593),
+            [(20, 7, 4, 22), (20, 7, 22, 4), (20, 25, 22, 4), (42, 7, 4, 22)],
         ),
         (
             "u02",
-            (49, 18, 3.141593),
-            (11, 18, 0.0),
-            [(18, 7, 4, 22), (18, 25, 26, 4), (44, 7, 4, 22)],
+            (53, 18, 3.141593),
+            (7, 18, 0.0),
+            [(18, 6, 4, 24), (18, 26, 24, 4), (42, 6, 4, 24)],
         ),
     ]
     return maps_from_specs(width, height, specs)

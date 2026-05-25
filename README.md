@@ -204,7 +204,9 @@ output/generated_obs_heuristic_compare_clean.csv    # 精简后的对比明细
 output/generated_obs_heuristic_compare_report.md    # 按启发式汇总的简单报告
 ```
 
-报告包含每种障碍物启发式的运行次数、成功率、平均耗时、平均扩展节点数、平均迭代次数和失败地图列表。
+报告包含每种障碍物启发式的运行次数、成功率、平均耗时、平均扩展节点数、平均迭代次数、失败地图列表，以及 `visibility_graph` 相比 `reverse_dijkstra` 的成功率差异、平均耗时降低比例、扩展节点降低比例和迭代数降低比例。
+
+注意：脚本每次运行会先删除同名旧结果文件，再重新生成 `csv / clean.csv / report.md`，避免 `ExperimentLogger` 追加写入导致统计混入旧结果。
 
 每次规划的路径 JSON 写入：
 
