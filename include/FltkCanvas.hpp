@@ -8,9 +8,12 @@
 
 #pragma once
 
-#include "VisualizationData.hpp"
+#include "Car.hpp"
+#include "GridMap.hpp"
 
 #include <FL/Fl_Widget.H>
+
+#include <vector>
 
 class FltkCanvas : public Fl_Widget {
 public:
@@ -20,9 +23,17 @@ public:
      * @param[in] y     窗口y坐标
      * @param[in] w     宽度
      * @param[in] h     高度
-     * @param[in] data  可视化数据引用
+     * @param[in] map      地图引用
+     * @param[in] vehicle  车辆配置
+     * @param[in] path     路径采样点
      */
-    FltkCanvas(int x, int y, int w, int h, const VisualizationData& data);
+    FltkCanvas(int x,
+               int y,
+               int w,
+               int h,
+               const GridMap& map,
+               const VehicleConfig& vehicle,
+               const std::vector<CarPose>& path);
 
     /**
      * @brief 设置当前显示帧号
@@ -54,6 +65,8 @@ private:
     /** @brief 绘制车辆轮廓。 */
     void drawCar(const CarPose& pose) const;
 
-    const VisualizationData& data_; ///< 可视化数据引用
-    int frame_ = 0;                 ///< 当前帧号
+    const GridMap& map_;                 ///< 地图引用
+    const VehicleConfig& vehicle_;       ///< 车辆配置引用
+    const std::vector<CarPose>& path_;   ///< 路径采样点引用
+    int frame_ = 0;                      ///< 当前帧号
 };

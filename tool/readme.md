@@ -2,7 +2,7 @@
 
 ## 路径 JSON 查看器
 
-`view_path_json.sh` 会自动构建 `path_json_viewer`，然后用 FLTK 窗口打开路径 JSON。
+`view_path_json.sh` 会自动构建 `path_json_viewer`，然后用独立 FLTK 查看器打开路径 JSON。
 
 默认打开 `output/result.json`：
 

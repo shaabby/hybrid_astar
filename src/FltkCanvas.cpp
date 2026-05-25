@@ -39,11 +39,21 @@ Fl_Color rgb(unsigned int value) {
  * @param[in] y      窗口y坐标
  * @param[in] w      宽度
  * @param[in] h      高度
- * @param[in] data   可视化数据引用
+ * @param[in] map      地图引用
+ * @param[in] vehicle  车辆配置
+ * @param[in] path     路径采样点
  */
-FltkCanvas::FltkCanvas(int x, int y, int w, int h, const VisualizationData& data)
+FltkCanvas::FltkCanvas(int x,
+                       int y,
+                       int w,
+                       int h,
+                       const GridMap& map,
+                       const VehicleConfig& vehicle,
+                       const std::vector<CarPose>& path)
     : Fl_Widget(x, y, w, h),
-      data_(data) {}
+      map_(map),
+      vehicle_(vehicle),
+      path_(path) {}
 
 /**
  * @brief 设置当前帧号并重绘
@@ -61,7 +71,7 @@ int FltkCanvas::frame() const {
 
 /** @brief 返回总帧数（路径点数）。 */
 int FltkCanvas::frameCount() const {
-    return static_cast<int>(data_.path.size());
+    return static_cast<int>(path_.size());
 }
 
 /**
@@ -72,8 +82,8 @@ double FltkCanvas::scale() const {
     const int usable_w = std::max(1, w() - kMargin * 2);
     const int usable_h = std::max(1, h() - kMargin * 2);
     return std::min(
-        static_cast<double>(usable_w) / static_cast<double>(data_.map.width()),
-        static_cast<double>(usable_h) / static_cast<double>(data_.map.height()));
+        static_cast<double>(usable_w) / static_cast<double>(map_.width()),
+        static_cast<double>(usable_h) / static_cast<double>(map_.height()));
 }
 
 /**
@@ -94,7 +104,7 @@ double FltkCanvas::worldX(double value) const {
  */
 double FltkCanvas::worldY(double value) const {
     return static_cast<double>(y()) + kMargin
-        + (static_cast<double>(data_.map.height()) - value) * scale();
+        + (static_cast<double>(map_.height()) - value) * scale();
 }
 
 /** @brief FLTK重绘回调，绘制整个场景。 */
@@ -106,13 +116,13 @@ void FltkCanvas::draw() {
 
     drawGrid();
     drawObstacles();
-    drawPoseMarker(data_.map.start(), 0x16a34a, "S");
-    drawPoseMarker(data_.map.goal(), 0xdc2626, "G");
+    drawPoseMarker(map_.start(), 0x16a34a, "S");
+    drawPoseMarker(map_.goal(), 0xdc2626, "G");
     drawPath();
 
     // 绘制当前帧对应的车辆姿态
-    if (!data_.path.empty()) {
-        drawCar(data_.path[static_cast<std::size_t>(frame_)]);
+    if (!path_.empty()) {
+        drawCar(path_[static_cast<std::size_t>(frame_)]);
     }
 }
 
@@ -122,20 +132,20 @@ void FltkCanvas::drawGrid() const {
     fl_line_style(FL_SOLID, 1);
 
     // 垂直网格线
-    for (int grid_x = 0; grid_x <= data_.map.width(); ++grid_x) {
+    for (int grid_x = 0; grid_x <= map_.width(); ++grid_x) {
         fl_line(
             static_cast<int>(std::round(worldX(grid_x))),
             static_cast<int>(std::round(worldY(0))),
             static_cast<int>(std::round(worldX(grid_x))),
-            static_cast<int>(std::round(worldY(data_.map.height()))));
+            static_cast<int>(std::round(worldY(map_.height()))));
     }
 
     // 水平网格线
-    for (int grid_y = 0; grid_y <= data_.map.height(); ++grid_y) {
+    for (int grid_y = 0; grid_y <= map_.height(); ++grid_y) {
         fl_line(
             static_cast<int>(std::round(worldX(0))),
             static_cast<int>(std::round(worldY(grid_y))),
-            static_cast<int>(std::round(worldX(data_.map.width()))),
+            static_cast<int>(std::round(worldX(map_.width()))),
             static_cast<int>(std::round(worldY(grid_y))));
     }
 
@@ -146,9 +156,9 @@ void FltkCanvas::drawGrid() const {
 void FltkCanvas::drawObstacles() const {
     const double s = scale();
     fl_color(rgb(0x111827));
-    for (int grid_y = 0; grid_y < data_.map.height(); ++grid_y) {
-        for (int grid_x = 0; grid_x < data_.map.width(); ++grid_x) {
-            if (!data_.map.isObstacle(grid_x, grid_y)) {
+    for (int grid_y = 0; grid_y < map_.height(); ++grid_y) {
+        for (int grid_x = 0; grid_x < map_.width(); ++grid_x) {
+            if (!map_.isObstacle(grid_x, grid_y)) {
                 continue;
             }
             fl_rectf(
@@ -193,7 +203,7 @@ void FltkCanvas::drawPoseMarker(
 
 /** @brief 绘制从起点到当前帧的路径线段。 */
 void FltkCanvas::drawPath() const {
-    if (data_.path.empty()) {
+    if (path_.empty()) {
         return;
     }
 
@@ -203,8 +213,8 @@ void FltkCanvas::drawPath() const {
 
     // 绘制到当前帧为止的所有路径线段
     for (int i = 1; i <= limit; ++i) {
-        const CarPose& a = data_.path[static_cast<std::size_t>(i - 1)];
-        const CarPose& b = data_.path[static_cast<std::size_t>(i)];
+        const CarPose& a = path_[static_cast<std::size_t>(i - 1)];
+        const CarPose& b = path_[static_cast<std::size_t>(i)];
         fl_line(
             static_cast<int>(std::round(worldX(a.x))),
             static_cast<int>(std::round(worldY(a.y))),
@@ -220,10 +230,9 @@ void FltkCanvas::drawPath() const {
  * @param[in] pose 车辆位姿
  */
 void FltkCanvas::drawCar(const CarPose& pose) const {
-    const VehicleConfig& vehicle = data_.vehicle;
-    const double front = vehicle.length - vehicle.rear_to_center;
-    const double rear = -vehicle.rear_to_center;
-    const double half_width = vehicle.width * 0.5;
+    const double front = vehicle_.length - vehicle_.rear_to_center;
+    const double rear = -vehicle_.rear_to_center;
+    const double half_width = vehicle_.width * 0.5;
     const double c = std::cos(pose.theta);
     const double st = std::sin(pose.theta);
 

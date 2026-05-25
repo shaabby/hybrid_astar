@@ -8,8 +8,9 @@
 
 #pragma once
 
+#include "Car.hpp"
 #include "FltkCanvas.hpp"
-#include "VisualizationData.hpp"
+#include "GridMap.hpp"
 
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Button.H>
@@ -29,9 +30,13 @@ class FltkViewer {
 public:
     /**
      * @brief 构造查看器
-     * @param[in] data 可视化数据引用
+     * @param[in] map      地图引用
+     * @param[in] vehicle  车辆配置引用
+     * @param[in] path     路径采样点引用
      */
-    explicit FltkViewer(const VisualizationData& data);
+    FltkViewer(const GridMap& map,
+               const VehicleConfig& vehicle,
+               const std::vector<CarPose>& path);
 
     /** @brief 进入FLTK事件循环，返回窗口关闭状态。 */
     int run();
@@ -61,7 +66,9 @@ private:
     /** @brief 定时触发器，播放下一帧。 */
     void tick();
 
-    const VisualizationData& data_;                      ///< 可视化数据引用
+    const GridMap& map_;                                 ///< 地图引用
+    const VehicleConfig& vehicle_;                       ///< 车辆配置引用
+    const std::vector<CarPose>& path_;                   ///< 路径采样点引用
     std::unique_ptr<Fl_Double_Window> window_;          ///< 主窗口
     FltkCanvas* canvas_ = nullptr;                      ///< 画布组件
     Fl_Button* toggle_button_ = nullptr;                 ///< 播放/暂停按钮

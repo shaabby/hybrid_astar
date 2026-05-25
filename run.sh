@@ -33,4 +33,5 @@ else
 fi
 
 echo
-echo "[run] Done. Open output/demo.html or use the FLTK window to view the animation."
+echo "[run] Opening output/result.json in path_json_viewer..."
+"${ROOT_DIR}/tool/view_path_json.sh" output/result.json

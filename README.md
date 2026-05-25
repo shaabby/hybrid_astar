@@ -1,19 +1,19 @@
 # Hybrid A* Demo
 
-一个基于 `C++23 + FLTK` 的 Hybrid A* 路径规划课程项目，包含：
+一个基于 `C++23` 的 Hybrid A* 路径规划课程项目，包含：
 
 - JSON 栅格地图读取
 - 简化车辆 bicycle model
 - Hybrid A* 搜索
 - Reeds-Shepp 解析扩展
 - 路径 JSON 导出
-- FLTK 本地查看器
+- 独立 FLTK 路径查看器
 - 批量实验与 CSV 日志
 
 典型流程：
 
 ```text
-地图 JSON -> C++ 规划 -> result.json / CSV -> FLTK 查看
+地图 JSON -> C++ 规划 -> result.json / CSV -> 独立查看器展示
 ```
 
 ## 目录
@@ -77,13 +77,14 @@ cmake --build build --config Release
 ./build/hybrid_astar config/default.yaml
 ```
 
-无图形环境下运行：
+主程序只负责规划并生成：
 
-```bash
-./build/hybrid_astar --no-view config/default.yaml
+```text
+output/result.json
+output/single_run_timing.csv
 ```
 
-`--html-only` 是 `--no-view` 的兼容别名。
+生成后可再调用独立查看器打开 JSON。
 
 ## 查看结果
 
@@ -240,11 +241,7 @@ map/grid_demo.html
 TMPDIR="$PWD/build/tmp" cmake --build build --config Release
 ```
 
-无图形显示：
-
-```bash
-./build/hybrid_astar --no-view config/default.yaml
-```
+无图形显示时，主程序仍可正常生成 JSON；只需跳过 `tool/view_path_json.sh` 即可。
 
 Windows 原生环境下，可执行文件通常在：
 

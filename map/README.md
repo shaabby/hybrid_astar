@@ -35,5 +35,6 @@ from the editor use single-cell obstacles:
 }
 ```
 
-The later C++ `main` program should read this JSON map, run Hybrid A*, then
-generate `output/demo.html` with the planned vehicle poses embedded inside.
+The C++ planner reads this JSON map, runs Hybrid A*, and writes
+`output/result.json`. You can then open that file with `tool/view_path_json.sh`
+or `tool/view_path_json.bat`.

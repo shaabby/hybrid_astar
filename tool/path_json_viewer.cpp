@@ -1,6 +1,5 @@
 #include "FltkViewer.hpp"
 #include "GridMap.hpp"
-#include "VisualizationData.hpp"
 
 #include <cctype>
 #include <cstdlib>
@@ -464,13 +463,7 @@ int main(int argc, char* argv[]) {
         std::cout << '\n';
         std::cout << "  samples: " << selected.samples.size() << '\n';
 
-        VisualizationData visualization{
-            .map = result.map,
-            .vehicle = result.vehicle,
-            .path = selected.samples,
-            .expanded = {}
-        };
-        FltkViewer viewer(visualization);
+        FltkViewer viewer(result.map, result.vehicle, selected.samples);
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';

@@ -74,8 +74,18 @@ if errorlevel 1 (
 )
 
 echo [demo-para] Opening generated path JSON files...
-call tool\view_path_json.bat "%OUTPUT_MAP_DIR%"
+call tool\view_path_json.bat "%OUTPUT_MAP_DIR%\fine"
+if errorlevel 1 goto :viewer_failed
+call tool\view_path_json.bat "%OUTPUT_MAP_DIR%\medium"
+if errorlevel 1 goto :viewer_failed
+call tool\view_path_json.bat "%OUTPUT_MAP_DIR%\coarse"
+if errorlevel 1 goto :viewer_failed
+set "EXIT_CODE=%ERRORLEVEL%"
+goto :done
+
+:viewer_failed
 set "EXIT_CODE=%ERRORLEVEL%"
 
+:done
 popd >nul
 exit /b %EXIT_CODE%

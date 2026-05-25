@@ -1,11 +1,9 @@
 #include "AppConfig.hpp"
 #include "Car.hpp"
 #include "ExperimentLogger.hpp"
-#include "FltkViewer.hpp"
 #include "GridMap.hpp"
 #include "HybridAstar.hpp"
 #include "JsonExporter.hpp"
-#include "VisualizationData.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -20,7 +18,6 @@ namespace {
 
 struct AppOptions {
     std::string config_path;
-    bool show_viewer = true;
 };
 
 void writeTextFile(const std::filesystem::path& path, const std::string& text) {
@@ -33,7 +30,7 @@ void writeTextFile(const std::filesystem::path& path, const std::string& text) {
 
 void printUsage(const char* executable) {
     std::cout
-        << "Usage: " << executable << " [--no-view] config.yaml\n"
+        << "Usage: " << executable << " config.yaml\n"
         << "       " << executable << " --help\n";
 }
 
@@ -50,10 +47,6 @@ AppOptions parseOptions(int argc, char* argv[]) {
         if (arg == "--help" || arg == "-h") {
             printUsage(argv[0]);
             std::exit(0);
-        }
-        if (arg == "--no-view" || arg == "--html-only") {
-            options.show_viewer = false;
-            continue;
         }
         if (!arg.empty() && arg.front() == '-') {
             throw std::runtime_error("Unknown option: " + arg);
@@ -166,19 +159,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  output/result.json\n";
         std::cout << "  output/single_run_timing.csv\n";
 
-        if (options.show_viewer) {
-            debugStage("open FLTK viewer");
-            VisualizationData visualization{
-                .map = map,
-                .vehicle = car.config(),
-                .path = plan.path,
-                .expanded = plan.expanded
-            };
-            FltkViewer viewer(visualization);
-            return viewer.run();
-        }
-
-        debugStage("finished without viewer");
+        debugStage("finished planning and export");
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';

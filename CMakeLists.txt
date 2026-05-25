@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.23)
 
-project(HybridAStarHtmlDemo LANGUAGES CXX)
+project(HybridAStarDemo LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,12 +20,18 @@ set(FLTK_BUILD_FLUID_DOCS OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(third_party/fltk-1.4.5)
 
-file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-)
-
 add_executable(hybrid_astar
-    ${PROJECT_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/AppConfig.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Car.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CollisionChecker.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ExperimentLogger.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/GridMap.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Heuristic.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/HybridAstar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/JsonExporter.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/LineOfSight.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ReedsShepp.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp/OmplReedsShepp.cpp"
 )
 
@@ -33,11 +39,6 @@ target_include_directories(hybrid_astar
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl_reeds_shepp"
-)
-
-target_link_libraries(hybrid_astar
-    PRIVATE
-    fltk::fltk
 )
 
 add_executable(reeds_shepp_empty_map_test

@@ -21,23 +21,29 @@ constexpr double kFrameSeconds = 1.0 / 30.0;
 
 /**
  * @brief 获取路径最后一帧的索引
- * @param[in] data 可视化数据
+ * @param[in] path 路径采样点
  * @return 最后一帧索引，无路径时返回0
  */
-int lastFrame(const VisualizationData& data) {
-    return std::max(0, static_cast<int>(data.path.size()) - 1);
+int lastFrame(const std::vector<CarPose>& path) {
+    return std::max(0, static_cast<int>(path.size()) - 1);
 }
 
 } // namespace
 
 /**
  * @brief 构造FLTK查看器窗口
- * @param[in] data 可视化数据引用
+ * @param[in] map      地图引用
+ * @param[in] vehicle  车辆配置引用
+ * @param[in] path     路径采样点引用
  *
  * 创建窗口、按钮、滑块和画布组件，设置回调函数。
  */
-FltkViewer::FltkViewer(const VisualizationData& data)
-    : data_(data) {
+FltkViewer::FltkViewer(const GridMap& map,
+                       const VehicleConfig& vehicle,
+                       const std::vector<CarPose>& path)
+    : map_(map),
+      vehicle_(vehicle),
+      path_(path) {
     // 窗口尺寸常量
     constexpr int window_w = 1160;
     constexpr int window_h = 820;
@@ -81,13 +87,14 @@ FltkViewer::FltkViewer(const VisualizationData& data)
 
     // 配置滑块
     slider_->type(FL_HORIZONTAL);
-    slider_->bounds(0.0, static_cast<double>(lastFrame(data_)));
+    slider_->bounds(0.0, static_cast<double>(lastFrame(path_)));
     slider_->step(1.0);
     slider_->value(0.0);
 
     // 创建画布
     canvas_ = new FltkCanvas(
-        pad, top_h + pad, window_w - pad * 2, window_h - top_h - pad * 2, data_);
+        pad, top_h + pad, window_w - pad * 2, window_h - top_h - pad * 2,
+        map_, vehicle_, path_);
 
     // 绑定回调
     toggle_button_->callback(toggleCallback, this);
@@ -138,7 +145,7 @@ void FltkViewer::timerCallback(void* user_data) {
 
 /** @brief 切换播放/暂停状态。 */
 void FltkViewer::togglePlayback() {
-    if (!playing_ && canvas_->frame() >= lastFrame(data_)) {
+    if (!playing_ && canvas_->frame() >= lastFrame(path_)) {
         setFrame(0);
     }
     playing_ = !playing_;
@@ -159,7 +166,7 @@ void FltkViewer::reset() {
 
 /** @brief 设置当前帧号并同步控件。 */
 void FltkViewer::setFrame(int frame) {
-    canvas_->setFrame(std::clamp(frame, 0, lastFrame(data_)));
+    canvas_->setFrame(std::clamp(frame, 0, lastFrame(path_)));
     syncControls();
 }
 
@@ -182,11 +189,11 @@ void FltkViewer::syncControls() {
 
 /** @brief 自动播放 tick，每帧调用一次。 */
 void FltkViewer::tick() {
-    if (!playing_ || data_.path.empty()) {
+    if (!playing_ || path_.empty()) {
         return;
     }
 
-    if (canvas_->frame() < lastFrame(data_)) {
+    if (canvas_->frame() < lastFrame(path_)) {
         setFrame(canvas_->frame() + 1);
     } else {
         playing_ = false;

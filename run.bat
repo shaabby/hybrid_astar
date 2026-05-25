@@ -47,4 +47,6 @@ if "%~1"=="" (
 if errorlevel 1 exit /b 1
 
 echo.
-echo [run] Done.
+echo [run] Opening output\result.json in path_json_viewer...
+call tool\view_path_json.bat output\result.json
+exit /b %ERRORLEVEL%
