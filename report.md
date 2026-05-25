@@ -2,7 +2,7 @@
 
 ## 摘要
 
-本项目实现了一个面向车辆路径规划教学展示的 Hybrid A* 路径规划程序。程序以栅格地图、起点、终点和车辆参数为输入，使用带车辆运动学约束的 Hybrid A* 算法搜索从起点到终点的连续可行路径，并将规划结果导出为 JSON 和 HTML Canvas 动画页面。项目使用 C++23 编写核心规划逻辑，使用 FLTK 提供本地窗口展示，并额外生成可直接用浏览器打开的单文件 HTML 页面，便于课堂演示和结果复现。
+本项目实现了一个面向车辆路径规划教学展示的 Hybrid A* 路径规划程序。程序以栅格地图、起点、终点和车辆参数为输入，使用带车辆运动学约束的 Hybrid A* 算法搜索从起点到终点的连续可行路径，并将规划结果导出为 JSON。项目使用 C++23 编写核心规划逻辑，使用 FLTK 提供本地窗口展示，同时提供独立路径 JSON 查看工具，便于课堂演示、结果复现和批量实验分析。
 
 ---
 
@@ -68,9 +68,9 @@ C++ 读取地图与 YAML 配置
     ↓ 构造 GridMap / Car / HybridAstar
 Hybrid A* 搜索车辆可行路径
     ↓ 碰撞检测与目标判断
-输出 result.json / demo.html / experiments.csv
+输出 result.json / 实验 CSV / 对比报告
     ↓
-浏览器或 FLTK 窗口展示规划结果
+FLTK 窗口或路径 JSON 查看器展示规划结果
 ```
 
 项目的输入主要包括：
@@ -81,8 +81,8 @@ Hybrid A* 搜索车辆可行路径
 项目的输出主要包括：
 
 - `output/result.json`：包含地图、车辆、路径和扩展节点数据。
-- `output/demo.html`：可直接打开的 Canvas 动画页面。
-- `output/experiments.csv`：记录每次实验的成功状态、路径点数、扩展节点数和运行时间等指标。
+- `output/single_run_timing.csv`：记录单次运行的成功状态、路径点数、扩展节点数、运行时间和细分计时指标。
+- `output/*_report.md`：记录批量实验的汇总结果和启发式对比结论。
 
 ### 2.2 程序结构
 
@@ -235,15 +235,13 @@ h = max(h_non_obs, h_obs)
 
 `AppConfigLoader` 从 YAML 配置文件读取程序运行参数，并生成 `AppConfig`。`AppConfig` 聚合了地图路径、车辆配置和 Hybrid A* 配置，使程序不需要把参数硬编码在源代码中。
 
-#### 2.3.8 `JsonExporter` 与 `HtmlWriter`
+#### 2.3.8 `JsonExporter`
 
-`JsonExporter` 负责将地图、车辆参数、路径点和扩展节点导出为 JSON 字符串。该 JSON 文件既可用于调试，也可被浏览器端可视化读取。
-
-`HtmlWriter` 负责把 JSON 数据嵌入 HTML 模板，生成完整的单文件 HTML 页面。这样最终结果不依赖本地服务器，直接双击 `output/demo.html` 即可查看动画。
+`JsonExporter` 负责将地图、车辆参数、路径点和扩展节点导出为 JSON 字符串。该 JSON 文件既可用于调试，也可被独立路径查看器读取，用于复现规划结果和检查批量实验输出。
 
 #### 2.3.9 `FltkCanvas` 与 `FltkViewer`
 
-FLTK 可视化模块用于在本地窗口中展示地图、障碍物、起点、终点和车辆路径。它与 HTML 输出形成互补：FLTK 适合运行程序时即时查看，HTML 更适合提交、演示和跨平台打开。
+FLTK 可视化模块用于在本地窗口中展示地图、障碍物、起点、终点和车辆路径。主程序可以在规划完成后直接打开 FLTK 窗口；也可以使用 `tool/path_json_viewer.cpp` 和 `tool/view_path_json.sh` 单独打开已经导出的路径 JSON。独立查看器默认只加载最终路径，不加载大量 `expanded` 搜索节点，从而保证大规模实验输出也能快速打开。
 
 #### 2.3.10 `ExperimentLogger`
 
@@ -267,8 +265,8 @@ HybridAstar ──> VehicleCollisionChecker
 HybridAstar ──> ReedsSheppGenerator
 HybridAstar ──> PlanResult
 PlanResult + GridMap + Car ──> JsonExporter ──> result.json
-result.json ──> HtmlWriter ──> demo.html
-PlanResult + Config ──> ExperimentLogger ──> experiments.csv
+result.json ──> path_json_viewer / view_path_json.sh ──> FltkViewer
+PlanResult + Config ──> ExperimentLogger ──> single_run_timing.csv
 ```
 
 这种设计将地图、车辆模型、搜索算法、碰撞检测、启发函数和可视化输出分离开来，使各模块职责清晰，便于调试和替换。
@@ -301,9 +299,9 @@ h = max(h_non_obs, h_obs)
 
 在接近目标时，程序尝试使用 Reeds-Shepp 风格路径直接连接目标。这种方法把离散搜索和连续解析曲线结合起来，可以减少末端搜索困难，使车辆更容易满足终点位姿约束。
 
-### 3.5 课堂展示友好的工程设计
+### 3.5 独立路径 JSON 查看工具
 
-项目输出单文件 HTML 动画页面，不依赖 Python、本地 HTTP 服务器、现场网络或复杂图形库部署。只要有浏览器，就可以查看规划结果。这一点提高了课程展示的可靠性，也方便将结果提交给老师检查。
+项目提供独立的 `tool/path_json_viewer.cpp` 和 `tool/view_path_json.sh`，支持快速打开已导出的路径 JSON 文件。支持单文件打开和目录下所有 JSON 批量打开，批量模式下按文件名排序逐个展示。查看器默认只加载最终路径，跳过大量扩展节点数据，保证大规模实验输出也能快速打开。
 
 ---
 
@@ -346,21 +344,14 @@ config/default.yaml
 ./build/hybrid_astar --no-view config/default.yaml
 ```
 
-或：
-
-```bash
-./build/hybrid_astar --html-only config/default.yaml
-```
-
 运行后生成：
 
 ```text
 output/result.json
-output/demo.html
-output/experiments.csv
+output/single_run_timing.csv
 ```
 
-其中 `output/demo.html` 可以直接用浏览器打开查看动画。
+可以使用 `tool/view_path_json.sh output/result.json` 在 FLTK 窗口中查看路径动画。
 
 ### 4.3 指定其他配置
 
@@ -439,7 +430,8 @@ hybrid_astar:
 - `enable_analytic_expansion`：开启后接近目标时尝试 Reeds-Shepp 直连，通常可以加快成功收敛。
 - `collision_safety_margin`：增大后车辆外轮廓会额外膨胀，路径更保守、更安全，但可通行空间变小。
 - `enable_obstacle_heuristic`：开启后启发式考虑障碍物信息，通常能减少无效搜索。
-- `debug`：开启后输出搜索进度，便于调试；关闭后运行输出更简洁。
+- `obstacle_heuristic_type`：选择障碍物启发式算法，可选 `visibility_graph` 或 `reverse_dijkstra`。前者基于障碍物边界可视点构造可视图并查表估价，后者基于障碍物膨胀后格子的反向 Dijkstra。`visibility_graph` 为当前默认选项。
+- `obstacle_heuristic_inflation_alpha`：只影响 `reverse_dijkstra`，控制障碍物膨胀半径。
 
 ---
 
@@ -461,7 +453,7 @@ line_of_sight_test
 app_config_test
 ```
 
-此外，也通过运行主程序并检查 `output/result.json`、`output/demo.html` 和 `output/experiments.csv` 来进行集成测试。
+此外，也可以通过运行主程序并检查 `output/result.json` 和 `output/single_run_timing.csv` 来进行集成测试。
 
 ### 5.2 Reeds-Shepp 空地图测试
 
@@ -517,10 +509,9 @@ app_config_test
 
 1. 程序是否正常退出。
 2. 是否生成 `output/result.json`。
-3. 是否生成 `output/demo.html`。
-4. 是否追加 `output/experiments.csv`。
-5. `result.json` 中是否包含地图、车辆、路径和扩展节点字段。
-6. `demo.html` 是否能在浏览器中显示地图、小车和轨迹动画。
+3. 是否追加 `output/single_run_timing.csv`。
+4. `result.json` 中是否包含地图、车辆、路径和扩展节点字段。
+5. 路径 JSON 能否被 `tool/view_path_json.sh` 正常打开。
 
 ### 5.6 测试数据生成
 
@@ -538,9 +529,10 @@ app_config_test
 
 1. 普通欧几里得启发式在障碍物较多时指导性不足，容易扩展大量无效节点。后来加入组合启发式，使启发函数同时考虑车辆无障碍距离和障碍物环境。
 2. 如果没有解析扩展，接近目标时可能需要较多迭代才能满足位置和角度容差。后来加入 Reeds-Shepp 风格的目标直连尝试，提高了末端连接能力。
-3. 图形显示环境不可用时，FLTK 窗口可能无法打开。项目增加了 `--no-view` 和 `--html-only` 模式，使程序在无桌面环境下仍可生成结果文件。
+3. 图形显示环境不可用时，FLTK 窗口可能无法打开。项目增加了 `--no-view` 模式，使程序在无桌面环境下仍可生成结果文件。
 4. 不同参数对搜索速度和结果影响较大，因此增加了 YAML 配置和 CSV 实验记录，便于多次运行后比较结果。
 5. 车辆碰撞检测不能只检查后轴中心所在栅格，而必须检查车身矩形 footprint。项目通过 `bodyCorners` 和矩形覆盖栅格检测提高了碰撞检测真实性。
+6. 地图生成脚本中 U 型地图的起点终点如果离障碍物太近，会导致车辆初始状态碰撞失败。将起终点清障半径从 2 调整到 3，并重新设计 U 型障碍模板位置，保证起终点车辆 footprint 不与障碍物重叠。
 
 ### 5.8 实验日志：高角度分辨率导致原地转圈
 
@@ -582,7 +574,92 @@ hybrid_astar:
 实验现象是：当 `theta_bins` 设置为 `360` 时，航向角离散粒度非常细。搜索去重时，同一位置附近只要朝向角落入不同角度分箱，就会被视为不同状态继续扩展。这会显著放大状态空间，并且在狭窄或启发式约束不够强的区域中，车辆容易反复尝试小角度调整，表现为局部转圈或原地打转。
 
 关键结论是：本次转圈现象的主要原因不是车辆运动模型错误，而是 `theta_bins: 360` 使闭集去重过细，导致大量近似重复的姿态状态没有被合并。后续调参时可以适当降低 `theta_bins`，或增大 `xy_resolution`、`primitive_length`、转向变化惩罚等参数，以减少局部重复搜索。
-![alt text](image.png)
+
+### 5.9 本地实验：障碍物启发式对比
+
+为了比较两种障碍物启发式的实际表现，本次本地实验调用脚本 `scripts/compare_obs_heuristics.sh`，在 `map/generated/` 下的 39 张自动生成地图上分别测试：
+
+- `visibility_graph`
+- `reverse_dijkstra`
+
+实验结果已经写出到：
+
+- `output/generated_obs_heuristic_compare.csv`
+- `output/generated_obs_heuristic_compare_clean.csv`
+- `output/generated_obs_heuristic_compare_report.md`
+
+汇总结果如下：
+
+| 障碍物启发式 | 地图数 | 成功数 | 成功率 | 平均运行时间/ms | 平均扩展节点数 | 平均迭代次数 | 平均路径点数 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `reverse_dijkstra` | 39 | 32 | 82.05% | 1358.891 | 8741.1 | 10174.3 | 82.3 |
+| `visibility_graph` | 39 | 33 | 84.62% | 1119.054 | 6703.7 | 7759.8 | 87.6 |
+
+从本次本地实验可以得到三个直接结论：
+
+1. `visibility_graph` 的成功率更高，比 `reverse_dijkstra` 高 `2.56%`。
+2. `visibility_graph` 的平均运行时间更低，从 `1358.891 ms` 降到 `1119.054 ms`，平均耗时下降 `17.65%`。
+3. `visibility_graph` 的平均扩展节点数更少，从 `8741.1` 降到 `6703.7`，平均扩展规模下降 `23.31%`，说明在本项目当前实现与参数设置下，它与搜索过程的配合更好。
+
+需要说明的是，这里的结论是针对“当前实现中的组合启发式”而言，而不是孤立地比较两种障碍物估价公式本身。项目中的实际启发式为 `max(h_non_obs, h_obs)`：其中 `h_non_obs` 是无障碍 Reeds-Shepp 风格距离，`h_obs` 才是这里比较的 `visibility_graph` 或 `reverse_dijkstra`。因此，本节结果表明的是：在当前 Hybrid A* 实现、离散化方式和参数配置下，采用 `visibility_graph` 作为障碍物项时，整体搜索效率更高。
+
+从理论上说，`visibility_graph` 基于二维点机器人绕障最短路，通常是一个较稳定的低估；而 `reverse_dijkstra` 基于膨胀后栅格的反向最短路，在离散网格、障碍物膨胀和单元格查表的共同影响下，并不保证始终比 `visibility_graph` 更适合作为当前搜索过程的引导信息。也就是说，`reverse_dijkstra` 即使在某些状态上给出更大的估价，也不必然带来更少的扩展节点或更高的成功率。
+
+失败样例也说明了两种启发式的差异。两者都在 `40x25_unreach01.json`、`60x36_unreach01.json` 和 `80x50_unreach01.json` 这类不可达地图上失败，这是符合预期的。除此之外，`visibility_graph` 额外失败的地图主要是 `80x50_narrow03.json`、`80x50_u01.json` 和 `80x50_u02.json`；而 `reverse_dijkstra` 除了这些困难样例外，还在 `80x50_narrow02.json` 上失败，说明在本次测试覆盖的部分大尺寸窄通道地图中，`visibility_graph` 的整体鲁棒性略优。
+
+综合来看，在本项目当前参数设置和测试地图集合下，`visibility_graph` 是更合适的默认障碍物启发式。它不仅平均更快，而且扩展节点更少、成功率也略高。因此，报告前文中将 `visibility_graph` 作为默认选项是有实验数据支撑的。不过，这一结论应理解为“在当前实现和参数下的经验最优选择”，而不是对所有 Hybrid A* 实现都成立的一般性结论。
+
+### 5.10 本地实验：单次运行时间分解
+
+为了分析程序在一组典型地图上的运行时间特征，本次使用 README 中给出的标准 `testbench` 命令执行默认参数组批量测试：
+
+```bash
+./build/hybrid_astar_testbench \
+  --groups config/testbench/default_groups.txt \
+  --maps map \
+  --output output/default_timing.csv \
+  --output-map-dir output/default_timing_maps
+```
+
+本次本地实验的结果写入 `output/default_timing.csv`。该实验共覆盖 `map/` 目录下的 `14` 张地图，得到如下总体结果：
+
+- 参数组数量：`1`
+- 地图数量：`14`
+- 成功次数：`12`
+- 失败次数：`2`
+- 成功率：`85.71%`
+
+如果按全部 `14` 次运行直接取平均，则 testbench 输出的主要统计量如下：
+
+| 指标 | 平均值 |
+|---|------:|
+| 平均总运行时间 `runtime_ms` | `1884.603 ms` |
+| 平均扩展节点数 `expanded_nodes` | `8340.4` |
+| 平均迭代次数 `iterations` | `9628.1` |
+| 平均生成节点数 `generated_nodes` | `14771.3` |
+| 平均路径点数 `path_poses` | `76.0` |
+
+由于失败样例 `map/u01.json` 和 `map/unreach01.json` 都跑满了 `30000` 次迭代上限，且单次耗时分别达到 `5243.540 ms` 和 `4770.151 ms`，它们会显著抬高总体平均值。因此，更能代表“成功规划时典型开销”的，是只统计 `12` 次成功样例后的细分计时结果。
+
+成功样例上的平均模块耗时如下：
+
+| 模块 | 平均耗时/ms | 占成功样例平均总时间比例 |
+|---|---:|---:|
+| 启发式预处理 `heuristic_prepare_ms` | 98.800 | 7.24% |
+| 主搜索循环 `search_loop_ms` | 1259.493 | 92.32% |
+| 运动基元碰撞检测 `primitive_collision_check_ms` | 991.263 | 72.66% |
+| 解析扩展 `analytic_expansion_ms` | 86.505 | 6.34% |
+| 障碍物查表构建 `obstacle_lookup_ms` | 97.087 | 7.12% |
+| 解析扩展中的 Reeds-Shepp 生成 `analytic_rs_generation_ms` | 11.517 | 0.84% |
+| 解析扩展中的碰撞检测 `analytic_collision_check_ms` | 74.561 | 5.47% |
+
+这个结果和我先前误读单次日志得到的结论正好不同。按照真正的批量 testbench 数据，在成功样例上最主要的时间开销不是解析扩展，而是主搜索循环中的运动基元扩展与对应的碰撞检测。`primitive_collision_check_ms` 平均达到 `991.263 ms`，约占成功样例总时间的 `72.66%`，说明默认参数下的大量候选运动基元碰撞检查才是主要热点。
+
+启发式预处理方面，`visibility_graph` 默认障碍物启发式的平均预处理耗时为 `98.800 ms`，其中 `obstacle_lookup_ms` 就占了 `97.087 ms`。相比之下，`visibility_graph_ms`、`visibility_points_ms` 和 `obstacle_collect_ms` 都很小，说明预处理阶段的主要开销依然集中在障碍物代价查找表生成，而不是可视点提取或可视图连边本身。
+
+从失败样例也能看出时间增长规律。两张失败地图都在达到 `30000` 次迭代上限后退出，因此失败时的高耗时主要是因为搜索空间被持续扩展，而不是某个预处理阶段异常变慢。这说明 `max_iterations`、地图可达性和状态空间规模对总时间影响非常直接。
+
+综合这次真正的运行时间测试，可以得到更可靠的结论：在默认参数组和 `map/` 测试集上，程序的主要耗时集中在 Hybrid A* 主搜索循环，而其中最值得优先优化的是运动基元相关的碰撞检测与状态扩展成本；解析扩展存在一定开销，但不是这组批量实验下的首要瓶颈。后续如果要继续优化运行时间，更合理的方向是减少无效节点生成、改进 primitive 级碰撞检测效率、调整状态离散精度，或者进一步增强启发式指导性以降低扩展节点数。
 
 ---
 
@@ -594,7 +671,7 @@ hybrid_astar:
 
 其次，我加深了对车辆运动学模型的理解。普通 A* 中的移动只是上下左右或八邻域扩展，而车辆路径规划必须考虑车辆朝向、转弯半径和倒车能力。通过实现 bicycle model，我理解了为什么车辆不能简单地被当作点来规划，也理解了后轴中心、前轮转角、最小转弯半径等概念在路径规划中的作用。
 
-第三，我体会到可视化对调试算法非常重要。仅仅从命令行输出“规划成功”或“规划失败”，很难判断问题出在哪里。通过导出 JSON 和 HTML 动画，可以直观看到路径是否绕开障碍物、车辆是否转向合理、终点姿态是否正确。这种可视化反馈大大提高了调试效率。
+第三，我体会到可视化对调试算法非常重要。仅仅从命令行输出”规划成功”或”规划失败”，很难判断问题出在哪里。通过 FLTK 窗口直接查看规划路径，或用路径 JSON 查看器单独打开已导出结果，可以直观看到路径是否绕开障碍物、车辆是否转向合理、终点姿态是否正确。这种可视化反馈大大提高了调试效率。
 
 第四，我学习到了模块化设计的重要性。本项目把地图、车辆、规划器、启发式、碰撞检测、配置读取、结果导出和实验记录拆分为不同模块。这样做虽然前期需要更多设计，但后续调试和扩展更方便。例如，如果要替换启发式或增加新的地图，只需要修改对应模块，而不必重写整个程序。
 
