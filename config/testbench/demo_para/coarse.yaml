@@ -11,7 +11,7 @@ vehicle:
 hybrid_astar:
   xy_resolution: 1
   theta_bins: 72
-  step_size: 1
+  step_size: 0.5
   primitive_length: 1
   goal_xy_tolerance: 1
   goal_theta_tolerance: 0.1

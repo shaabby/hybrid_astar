@@ -9,10 +9,10 @@ vehicle:
   max_steer: 0.61
 
 hybrid_astar:
-  xy_resolution: 0.5
+  xy_resolution: 0.3
   theta_bins: 72
-  step_size: 0.5
-  primitive_length: 0.5
+  step_size: 0.3
+  primitive_length: 0.6
   goal_xy_tolerance: 1
   goal_theta_tolerance: 0.1
   reverse_penalty: 5.0
