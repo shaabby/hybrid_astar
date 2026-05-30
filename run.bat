@@ -2,6 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
+set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BUILD_DIR=%SCRIPT_DIR%build"
 set "CMAKE_DIR=%SCRIPT_DIR%cmake\bin"
 set "BUILD_TYPE=Release"
