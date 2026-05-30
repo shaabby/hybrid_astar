@@ -2,7 +2,7 @@
  * @file JsonExporter.cpp
  * @brief JSON数据导出器实现
  *
- * 将规划结果序列化为JSON字符串，供浏览器端可视化使用。
+ * 将规划结果序列化为JSON字符串。
  */
 
 #include "JsonExporter.hpp"
