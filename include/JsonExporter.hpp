@@ -23,6 +23,8 @@ public:
      * @param[in] expanded  扩展过的搜索节点，用于可视化搜索过程
      * @param[in] search_tree 搜索树扩展边
      * @param[in] solution_node_ids 最终解链搜索节点 id
+     * @param[in] solution_open_orders 最终解节点进入 open 的顺序
+     * @param[in] solution_close_orders 最终解节点进入 closed set 的顺序
      * @param[in] solution_path_frame_starts 解节点对应路径帧
      * @return 格式化后的 JSON 字符串
      */
@@ -33,6 +35,8 @@ public:
         const std::vector<CarPose>& expanded = {},
         const std::vector<SearchTreeEdge>& search_tree = {},
         const std::vector<int>& solution_node_ids = {},
+        const std::vector<int>& solution_open_orders = {},
+        const std::vector<int>& solution_close_orders = {},
         const std::vector<int>& solution_path_frame_starts = {});
 
     /**

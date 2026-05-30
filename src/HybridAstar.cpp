@@ -63,6 +63,8 @@ struct Node {
     double h = 0.0;        ///< 启发式估计代价（到目标的距离）
     double f = 0.0;        ///< f = g + h，优先队列排序依据
     int parent = -1;       ///< 父节点在 nodes 数组中的索引，-1 表示起点
+    int open_order = -1;   ///< 进入 open set 的顺序
+    int close_order = -1;  ///< 进入 closed set 的顺序
     std::vector<CarPose> segment; ///< 从父节点运动到本节点的连续轨迹
 };
 
@@ -364,6 +366,14 @@ void setSuccessfulSearchResult(PlanResult& result,
                                int goal_id) {
     result.success = true;
     result.solution_node_ids = reconstructNodeIds(nodes, goal_id);
+    result.solution_open_orders.clear();
+    result.solution_close_orders.clear();
+    result.solution_open_orders.reserve(result.solution_node_ids.size());
+    result.solution_close_orders.reserve(result.solution_node_ids.size());
+    for (int node_id : result.solution_node_ids) {
+        result.solution_open_orders.push_back(nodes[node_id].open_order);
+        result.solution_close_orders.push_back(nodes[node_id].close_order);
+    }
     result.path = reconstructPathFromIds(
         nodes, result.solution_node_ids,
         &result.solution_path_frame_starts);
@@ -435,11 +445,17 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
 
     std::vector<Node> nodes;
     nodes.reserve(4096);
+    std::vector<int> node_edge_indices;
+    node_edge_indices.reserve(4096);
 
     Node start_node = makeNode(start, config_, heuristic);
     start_node.g = 0.0;
     start_node.f = start_node.h;
+    int next_open_order = 0;
+    int next_close_order = 0;
+    start_node.open_order = next_open_order++;
     nodes.push_back(start_node);
+    node_edge_indices.push_back(-1);
 
     // ------------------------------------------------------------------
     // 2. 初始化 open set（优先队列）和 closed set
@@ -511,6 +527,14 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
             continue;
         }
         closed.insert(current_key);
+        nodes[static_cast<std::size_t>(current_id)].close_order =
+            next_close_order++;
+        const int edge_index_for_current =
+            node_edge_indices[static_cast<std::size_t>(current_id)];
+        if (edge_index_for_current >= 0) {
+            result.search_tree[static_cast<std::size_t>(edge_index_for_current)]
+                .close_order = nodes[static_cast<std::size_t>(current_id)].close_order;
+        }
         result.expanded.push_back(current.pose);
         const int progress_interval =
             std::max(1, config_.debug_progress_interval);
@@ -687,13 +711,17 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 // 5.5 加入 open set
                 computeHeuristicCost(next, heuristic);
                 const int next_id = static_cast<int>(nodes.size());
+                next.open_order = next_open_order++;
                 edge.child = next_id;
+                edge.open_order = next.open_order;
                 edge.to = next.pose;
                 edge.segment = next.segment;
                 edge.accepted = true;
+                const int edge_index = static_cast<int>(result.search_tree.size());
                 result.search_tree.push_back(std::move(edge));
                 best_g[next_key] = next.g;
                 nodes.push_back(std::move(next));
+                node_edge_indices.push_back(edge_index);
                 open.push({nodes[next_id].f, next_id});
             }
         }

@@ -366,7 +366,8 @@ void exportOutputMap(const std::filesystem::path& output_map_dir,
         output_map_dir / group_name / map_path.stem();
     const std::string json = JsonExporter::exportPath(
         map, car, plan.path, plan.expanded, plan.search_tree,
-        plan.solution_node_ids, plan.solution_path_frame_starts);
+        plan.solution_node_ids, plan.solution_open_orders,
+        plan.solution_close_orders, plan.solution_path_frame_starts);
     writeTextFile(base_path.string() + ".json", json);
 }
 

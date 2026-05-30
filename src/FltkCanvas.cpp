@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 
 namespace {
@@ -52,6 +53,8 @@ FltkCanvas::FltkCanvas(int x,
                        const std::vector<CarPose>& path,
                        const std::vector<SearchTreeEdge>& search_tree,
                        const std::vector<int>& solution_node_ids,
+                       const std::vector<int>& solution_open_orders,
+                       const std::vector<int>& solution_close_orders,
                        const std::vector<int>& solution_path_frame_starts)
     : Fl_Widget(x, y, w, h),
       map_(map),
@@ -59,6 +62,8 @@ FltkCanvas::FltkCanvas(int x,
       path_(path),
       search_tree_(search_tree),
       solution_node_ids_(solution_node_ids),
+      solution_open_orders_(solution_open_orders),
+      solution_close_orders_(solution_close_orders),
       solution_path_frame_starts_(solution_path_frame_starts) {}
 
 /**
@@ -252,39 +257,43 @@ std::size_t FltkCanvas::currentSolutionNodeIndex() const {
 }
 
 void FltkCanvas::drawCurrentSearchBranches() const {
-    if (solution_node_ids_.empty() || solution_path_frame_starts_.empty()) {
+    if (search_tree_.empty() || solution_close_orders_.empty()) {
         return;
     }
 
     fl_color(rgb(0xdc2626));
-    fl_line_style(FL_SOLID, 2);
-    const std::size_t last_solution_index = currentSolutionNodeIndex();
-    const std::size_t count = std::min(
-        solution_node_ids_.size(), last_solution_index + 1);
-    for (std::size_t solution_index = 0; solution_index < count; ++solution_index) {
-        const int node_id = solution_node_ids_[solution_index];
-        for (const SearchTreeEdge& edge : search_tree_) {
-            if (edge.parent != node_id || !edge.accepted || edge.in_solution) {
-                continue;
-            }
-            if (edge.segment.empty()) {
-                fl_line(
-                    static_cast<int>(std::round(worldX(edge.from.x))),
-                    static_cast<int>(std::round(worldY(edge.from.y))),
-                    static_cast<int>(std::round(worldX(edge.to.x))),
-                    static_cast<int>(std::round(worldY(edge.to.y))));
-                continue;
-            }
+    fl_line_style(FL_SOLID, 1);
 
-            CarPose previous = edge.from;
-            for (const CarPose& pose : edge.segment) {
-                fl_line(
-                    static_cast<int>(std::round(worldX(previous.x))),
-                    static_cast<int>(std::round(worldY(previous.y))),
-                    static_cast<int>(std::round(worldX(pose.x))),
-                    static_cast<int>(std::round(worldY(pose.y))));
-                previous = pose;
-            }
+    const std::size_t solution_index = currentSolutionNodeIndex();
+    const int begin_order = solution_close_orders_.front();
+    const int end_order = solution_index + 1 < solution_close_orders_.size()
+        ? solution_close_orders_[solution_index + 1]
+        : std::numeric_limits<int>::max();
+
+    for (const SearchTreeEdge& edge : search_tree_) {
+        if (!edge.accepted || edge.in_solution
+            || edge.close_order < 0
+            || edge.close_order <= begin_order
+            || edge.close_order >= end_order) {
+            continue;
+        }
+        if (edge.segment.empty()) {
+            fl_line(
+                static_cast<int>(std::round(worldX(edge.from.x))),
+                static_cast<int>(std::round(worldY(edge.from.y))),
+                static_cast<int>(std::round(worldX(edge.to.x))),
+                static_cast<int>(std::round(worldY(edge.to.y))));
+            continue;
+        }
+
+        CarPose previous = edge.from;
+        for (const CarPose& pose : edge.segment) {
+            fl_line(
+                static_cast<int>(std::round(worldX(previous.x))),
+                static_cast<int>(std::round(worldY(previous.y))),
+                static_cast<int>(std::round(worldX(pose.x))),
+                static_cast<int>(std::round(worldY(pose.y))));
+            previous = pose;
         }
     }
     fl_line_style(0);

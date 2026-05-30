@@ -81,6 +81,8 @@ struct TimingBreakdown {
 struct SearchTreeEdge {
     int parent = -1;                 ///< 父搜索节点 id
     int child = -1;                  ///< 子搜索节点 id，未进入 open 时为 -1
+    int open_order = -1;             ///< 子节点进入 open 的顺序
+    int close_order = -1;            ///< 子节点进入 closed set 的顺序
     CarPose from;                    ///< 父节点位姿
     CarPose to;                      ///< 扩展尝试结束位姿
     std::vector<CarPose> segment;    ///< 从父节点到子节点的运动轨迹
@@ -99,6 +101,8 @@ struct PlanResult {
     std::vector<CarPose> expanded; ///< 扩展过的搜索节点（用于调试可视化）
     std::vector<SearchTreeEdge> search_tree; ///< 搜索树扩展边
     std::vector<int> solution_node_ids;      ///< 最终解链中的搜索节点 id
+    std::vector<int> solution_open_orders;   ///< 最终解节点进入 open 的顺序
+    std::vector<int> solution_close_orders;  ///< 最终解节点进入 closed set 的顺序
     std::vector<int> solution_path_frame_starts; ///< 解节点对应的路径帧
     int iterations = 0;            ///< 搜索循环迭代次数
     std::size_t generated_nodes = 0; ///< 搜索过程中生成的节点数量

@@ -1,5 +1,5 @@
 # 地图文件路径，程序启动时会从该 JSON 文件读取障碍物、起点和终点。
-map_path: map/default_map.json
+map_path: map/empty01.json
 
 # 车辆物理参数，单位为地图坐标单位；角度均使用弧度。
 vehicle:
