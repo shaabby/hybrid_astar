@@ -40,10 +40,16 @@ int lastFrame(const std::vector<CarPose>& path) {
  */
 FltkViewer::FltkViewer(const GridMap& map,
                        const VehicleConfig& vehicle,
-                       const std::vector<CarPose>& path)
+                       const std::vector<CarPose>& path,
+                       const std::vector<SearchTreeEdge>& search_tree,
+                       const std::vector<int>& solution_node_ids,
+                       const std::vector<int>& solution_path_frame_starts)
     : map_(map),
       vehicle_(vehicle),
-      path_(path) {
+      path_(path),
+      search_tree_(search_tree),
+      solution_node_ids_(solution_node_ids),
+      solution_path_frame_starts_(solution_path_frame_starts) {
     // 窗口尺寸常量
     constexpr int window_w = 1160;
     constexpr int window_h = 820;
@@ -94,7 +100,8 @@ FltkViewer::FltkViewer(const GridMap& map,
     // 创建画布
     canvas_ = new FltkCanvas(
         pad, top_h + pad, window_w - pad * 2, window_h - top_h - pad * 2,
-        map_, vehicle_, path_);
+        map_, vehicle_, path_, search_tree_, solution_node_ids_,
+        solution_path_frame_starts_);
 
     // 绑定回调
     toggle_button_->callback(toggleCallback, this);

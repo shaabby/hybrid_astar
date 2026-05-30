@@ -76,12 +76,30 @@ struct TimingBreakdown {
 };
 
 /**
+ * @brief 搜索树中的一条扩展边，用于可视化调试。
+ */
+struct SearchTreeEdge {
+    int parent = -1;                 ///< 父搜索节点 id
+    int child = -1;                  ///< 子搜索节点 id，未进入 open 时为 -1
+    CarPose from;                    ///< 父节点位姿
+    CarPose to;                      ///< 扩展尝试结束位姿
+    std::vector<CarPose> segment;    ///< 从父节点到子节点的运动轨迹
+    bool accepted = false;           ///< 是否成功加入 open/nodes
+    bool collision = false;          ///< 是否因碰撞失败
+    bool duplicate = false;          ///< 是否因 closed/best_g 被拒绝
+    bool in_solution = false;        ///< 是否属于最终解 parent 链
+};
+
+/**
  * @brief 规划结果
  */
 struct PlanResult {
     bool success = false;      ///< 是否找到可行路径
     std::vector<CarPose> path;     ///< 最终路径点序列
     std::vector<CarPose> expanded; ///< 扩展过的搜索节点（用于调试可视化）
+    std::vector<SearchTreeEdge> search_tree; ///< 搜索树扩展边
+    std::vector<int> solution_node_ids;      ///< 最终解链中的搜索节点 id
+    std::vector<int> solution_path_frame_starts; ///< 解节点对应的路径帧
     int iterations = 0;            ///< 搜索循环迭代次数
     std::size_t generated_nodes = 0; ///< 搜索过程中生成的节点数量
     std::size_t open_remaining = 0;  ///< 结束时 open set 中剩余条目数量

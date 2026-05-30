@@ -134,7 +134,8 @@ int main(int argc, char* argv[]) {
 
         debugStage("export path json");
         const std::string json = JsonExporter::exportPath(
-            map, car, plan.path, plan.expanded);
+            map, car, plan.path, plan.expanded, plan.search_tree,
+            plan.solution_node_ids, plan.solution_path_frame_starts);
         debugStage("write output files");
         writeTextFile("output/result.json", json);
 

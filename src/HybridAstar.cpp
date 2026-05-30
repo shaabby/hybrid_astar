@@ -306,34 +306,68 @@ void computeHeuristicCost(Node& node, const Heuristic& heuristic) {
     node.f = node.g + node.h;
 }
 
-/**
- * @brief 从目标节点回溯到起点，重建完整路径。
- *
- * 通过 parent 指针链逆向遍历，反转后按正向顺序输出。
- * 相邻节点之间的 segment 被依次拼接，形成连续轨迹。
- *
- * @param[in] nodes   所有已生成节点的数组
- * @param[in] goal_id 目标节点在数组中的索引
- * @return 从起点到终点的连续位姿序列
- */
-std::vector<CarPose> reconstructPath(const std::vector<Node>& nodes, int goal_id) {
+std::vector<int> reconstructNodeIds(const std::vector<Node>& nodes, int goal_id) {
     std::vector<int> ids;
     for (int id = goal_id; id >= 0; id = nodes[id].parent) {
         ids.push_back(id);
     }
     std::reverse(ids.begin(), ids.end());
+    return ids;
+}
 
+std::vector<CarPose> reconstructPathFromIds(
+    const std::vector<Node>& nodes,
+    const std::vector<int>& ids,
+    std::vector<int>* frame_starts = nullptr) {
     std::vector<CarPose> path;
     if (ids.empty()) {
         return path;
     }
 
     path.push_back(nodes[ids.front()].pose);
+    if (frame_starts != nullptr) {
+        frame_starts->clear();
+        frame_starts->push_back(0);
+    }
     for (std::size_t i = 1; i < ids.size(); ++i) {
         const std::vector<CarPose>& segment = nodes[ids[i]].segment;
+        if (frame_starts != nullptr) {
+            frame_starts->push_back(static_cast<int>(path.size()));
+        }
         path.insert(path.end(), segment.begin(), segment.end());
     }
     return path;
+}
+
+void markSolutionEdges(std::vector<SearchTreeEdge>& edges,
+                       const std::vector<int>& solution_ids) {
+    if (solution_ids.size() < 2) {
+        return;
+    }
+    for (SearchTreeEdge& edge : edges) {
+        edge.in_solution = false;
+    }
+    for (std::size_t i = 1; i < solution_ids.size(); ++i) {
+        const int parent = solution_ids[i - 1];
+        const int child = solution_ids[i];
+        for (SearchTreeEdge& edge : edges) {
+            if (edge.parent == parent && edge.child == child) {
+                edge.in_solution = true;
+                break;
+            }
+        }
+    }
+}
+
+void setSuccessfulSearchResult(PlanResult& result,
+                               const std::vector<Node>& nodes,
+                               int goal_id) {
+    result.success = true;
+    result.solution_node_ids = reconstructNodeIds(nodes, goal_id);
+    result.path = reconstructPathFromIds(
+        nodes, result.solution_node_ids,
+        &result.solution_path_frame_starts);
+    markSolutionEdges(result.search_tree, result.solution_node_ids);
 }
 
 } // namespace
@@ -496,8 +530,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
 
         // 到达目标，重建路径并返回
         if (isGoal(current.pose, map, config_)) {
-            result.success = true;
-            result.path = reconstructPath(nodes, current_id);
+            setSuccessfulSearchResult(result, nodes, current_id);
             result.generated_nodes = nodes.size();
             result.open_remaining = open.size();
             if (config_.debug) {
@@ -535,8 +568,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 if (config_.enable_timing) {
                     ++result.timing.analytic_successes;
                 }
-                result.success = true;
-                result.path = reconstructPath(nodes, current_id);
+                setSuccessfulSearchResult(result, nodes, current_id);
                 result.path.insert(result.path.end(),
                                    analytic_path->samples.begin(),
                                    analytic_path->samples.end());
@@ -559,6 +591,9 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
         // ------------------------------------------------------------------
         for (int direction : directions) {
             for (double steer : steers) {
+                SearchTreeEdge edge;
+                edge.parent = current_id;
+                edge.from = current.pose;
                 CarPose pose = current.pose;
                 std::vector<CarPose> segment;
                 segment.reserve(static_cast<std::size_t>(substeps));
@@ -587,8 +622,7 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                     segment.push_back(pose);
 
                     if (isGoal(pose, map, config_)) {
-                        result.success = true;
-                        result.path = reconstructPath(nodes, current_id);
+                        setSuccessfulSearchResult(result, nodes, current_id);
                         result.path.insert(result.path.end(),
                                            segment.begin(), segment.end());
                         result.generated_nodes = nodes.size();
@@ -606,6 +640,10 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 }
 
                 if (collision || segment.empty()) {
+                    edge.to = pose;
+                    edge.segment = std::move(segment);
+                    edge.collision = collision;
+                    result.search_tree.push_back(std::move(edge));
                     continue; // 碰撞或没有移动，放弃该分支
                 }
 
@@ -630,17 +668,30 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
                 // 5.4 去重：检查 closed set 和 best_g
                 const StateKey next_key = makeKey(next);
                 if (closed.contains(next_key)) {
+                    edge.to = pose;
+                    edge.segment = next.segment;
+                    edge.duplicate = true;
+                    result.search_tree.push_back(std::move(edge));
                     continue;
                 }
 
                 const auto best = best_g.find(next_key);
                 if (best != best_g.end() && best->second <= next.g) {
+                    edge.to = pose;
+                    edge.segment = next.segment;
+                    edge.duplicate = true;
+                    result.search_tree.push_back(std::move(edge));
                     continue; // 已有更优路径到达该离散状态
                 }
 
                 // 5.5 加入 open set
                 computeHeuristicCost(next, heuristic);
                 const int next_id = static_cast<int>(nodes.size());
+                edge.child = next_id;
+                edge.to = next.pose;
+                edge.segment = next.segment;
+                edge.accepted = true;
+                result.search_tree.push_back(std::move(edge));
                 best_g[next_key] = next.g;
                 nodes.push_back(std::move(next));
                 open.push({nodes[next_id].f, next_id});

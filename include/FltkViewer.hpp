@@ -36,7 +36,10 @@ public:
      */
     FltkViewer(const GridMap& map,
                const VehicleConfig& vehicle,
-               const std::vector<CarPose>& path);
+               const std::vector<CarPose>& path,
+               const std::vector<SearchTreeEdge>& search_tree,
+               const std::vector<int>& solution_node_ids,
+               const std::vector<int>& solution_path_frame_starts);
 
     /** @brief 进入FLTK事件循环，返回窗口关闭状态。 */
     int run();
@@ -69,6 +72,9 @@ private:
     const GridMap& map_;                                 ///< 地图引用
     const VehicleConfig& vehicle_;                       ///< 车辆配置引用
     const std::vector<CarPose>& path_;                   ///< 路径采样点引用
+    const std::vector<SearchTreeEdge>& search_tree_;     ///< 搜索树边引用
+    const std::vector<int>& solution_node_ids_;          ///< 最终解节点 id 引用
+    const std::vector<int>& solution_path_frame_starts_; ///< 解节点路径帧引用
     std::unique_ptr<Fl_Double_Window> window_;          ///< 主窗口
     FltkCanvas* canvas_ = nullptr;                      ///< 画布组件
     Fl_Button* toggle_button_ = nullptr;                 ///< 播放/暂停按钮

@@ -10,6 +10,7 @@
 
 #include "Car.hpp"
 #include "GridMap.hpp"
+#include "HybridAstar.hpp"
 
 #include <FL/Fl_Widget.H>
 
@@ -33,7 +34,10 @@ public:
                int h,
                const GridMap& map,
                const VehicleConfig& vehicle,
-               const std::vector<CarPose>& path);
+               const std::vector<CarPose>& path,
+               const std::vector<SearchTreeEdge>& search_tree,
+               const std::vector<int>& solution_node_ids,
+               const std::vector<int>& solution_path_frame_starts);
 
     /**
      * @brief 设置当前显示帧号
@@ -62,11 +66,18 @@ private:
     void drawPoseMarker(const Pose2D& pose, unsigned int color, const char* label) const;
     /** @brief 绘制规划路径曲线。 */
     void drawPath() const;
+    /** @brief 绘制截至当前最终解节点扩展出的未选中分支。 */
+    void drawCurrentSearchBranches() const;
+    /** @brief 返回当前帧对应的最终解节点序号。 */
+    [[nodiscard]] std::size_t currentSolutionNodeIndex() const;
     /** @brief 绘制车辆轮廓。 */
     void drawCar(const CarPose& pose) const;
 
     const GridMap& map_;                 ///< 地图引用
     const VehicleConfig& vehicle_;       ///< 车辆配置引用
     const std::vector<CarPose>& path_;   ///< 路径采样点引用
+    const std::vector<SearchTreeEdge>& search_tree_; ///< 搜索树边引用
+    const std::vector<int>& solution_node_ids_; ///< 最终解节点 id 引用
+    const std::vector<int>& solution_path_frame_starts_; ///< 解节点路径帧引用
     int frame_ = 0;                      ///< 当前帧号
 };

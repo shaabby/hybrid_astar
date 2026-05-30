@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+struct SearchTreeEdge;
+
 /**
  * @brief JSON 数据导出器。
  *
@@ -19,13 +21,19 @@ public:
      * @param[in] car       车辆模型
      * @param[in] path      路径点序列
      * @param[in] expanded  扩展过的搜索节点，用于可视化搜索过程
+     * @param[in] search_tree 搜索树扩展边
+     * @param[in] solution_node_ids 最终解链搜索节点 id
+     * @param[in] solution_path_frame_starts 解节点对应路径帧
      * @return 格式化后的 JSON 字符串
      */
     [[nodiscard]] static std::string exportPath(
         const GridMap& map,
         const Car& car,
         const std::vector<CarPose>& path,
-        const std::vector<CarPose>& expanded = {});
+        const std::vector<CarPose>& expanded = {},
+        const std::vector<SearchTreeEdge>& search_tree = {},
+        const std::vector<int>& solution_node_ids = {},
+        const std::vector<int>& solution_path_frame_starts = {});
 
     /**
      * @brief 单独导出地图数据为 JSON 对象字符串。
@@ -48,4 +56,12 @@ public:
      */
     [[nodiscard]] static std::string exportPathPoints(
         const std::vector<CarPose>& path);
+
+    /** @brief 单独导出整数数组。 */
+    [[nodiscard]] static std::string exportIntArray(
+        const std::vector<int>& values);
+
+    /** @brief 单独导出搜索树扩展边数组。 */
+    [[nodiscard]] static std::string exportSearchTree(
+        const std::vector<SearchTreeEdge>& edges);
 };

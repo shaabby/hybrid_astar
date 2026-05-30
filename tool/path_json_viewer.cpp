@@ -1,5 +1,6 @@
 #include "FltkViewer.hpp"
 #include "GridMap.hpp"
+#include "HybridAstar.hpp"
 
 #include <cctype>
 #include <cstdlib>
@@ -24,6 +25,9 @@ struct LoadedResult {
     GridMap map;
     VehicleConfig vehicle;
     std::vector<PathRecord> paths;
+    std::vector<SearchTreeEdge> search_tree;
+    std::vector<int> solution_node_ids;
+    std::vector<int> solution_path_frame_starts;
 };
 
 struct ToolOptions {
@@ -92,6 +96,26 @@ int readIntField(const std::string& object,
                  int fallback,
                  bool required) {
     return static_cast<int>(readNumberField(object, key, fallback, required));
+}
+
+bool readBoolField(const std::string& object,
+                   const std::string& key,
+                   bool fallback,
+                   bool required) {
+    const std::optional<std::size_t> pos = findFieldValue(object, key);
+    if (!pos) {
+        if (required) {
+            throw std::runtime_error("Missing boolean field: " + key);
+        }
+        return fallback;
+    }
+    if (object.compare(*pos, 4, "true") == 0) {
+        return true;
+    }
+    if (object.compare(*pos, 5, "false") == 0) {
+        return false;
+    }
+    throw std::runtime_error("Invalid boolean field: " + key);
 }
 
 std::optional<std::string> readStringFieldOptional(const std::string& object,
@@ -234,6 +258,63 @@ std::vector<CarPose> readPoseArray(const std::string& array_text) {
     return poses;
 }
 
+std::vector<int> readIntArray(const std::string& array_text) {
+    std::vector<int> values;
+    std::size_t pos = 0;
+    while (pos < array_text.size()) {
+        pos = skipWhitespace(array_text, pos);
+        if (pos >= array_text.size() || array_text[pos] == ']') {
+            break;
+        }
+        if (array_text[pos] == '[' || array_text[pos] == ',') {
+            ++pos;
+            continue;
+        }
+
+        const char* start = array_text.c_str() + pos;
+        char* end = nullptr;
+        const long value = std::strtol(start, &end, 10);
+        if (end == start) {
+            throw std::runtime_error("Invalid integer array value");
+        }
+        values.push_back(static_cast<int>(value));
+        pos = static_cast<std::size_t>(end - array_text.c_str());
+    }
+    return values;
+}
+
+SearchTreeEdge readSearchTreeEdge(const std::string& object) {
+    SearchTreeEdge edge;
+    edge.parent = readIntField(object, "parent", -1, true);
+    edge.child = readIntField(object, "child", -1, false);
+    edge.accepted = readBoolField(object, "accepted", false, false);
+    edge.collision = readBoolField(object, "collision", false, false);
+    edge.duplicate = readBoolField(object, "duplicate", false, false);
+    edge.in_solution = readBoolField(object, "in_solution", false, false);
+    if (const std::optional<std::string> from =
+            readObjectFieldOptional(object, "from")) {
+        edge.from = readCarPose(*from);
+    }
+    if (const std::optional<std::string> to =
+            readObjectFieldOptional(object, "to")) {
+        edge.to = readCarPose(*to);
+    }
+    if (const std::optional<std::string> segment =
+            readArrayFieldOptional(object, "segment")) {
+        edge.segment = readPoseArray(*segment);
+    }
+    return edge;
+}
+
+std::vector<SearchTreeEdge> readSearchTreeArray(
+    const std::string& array_text) {
+    std::vector<SearchTreeEdge> edges;
+    for (const std::string& object : readObjectsInArray(array_text)) {
+        edges.push_back(readSearchTreeEdge(object));
+    }
+    return edges;
+}
+
 std::filesystem::path sourcePath(const std::string& path) {
     std::filesystem::path candidate(path);
     if (candidate.is_absolute()) {
@@ -343,6 +424,22 @@ LoadedResult loadResultJson(const std::filesystem::path& json_path) {
             result.paths.push_back(readPathObject(object, index));
             ++index;
         }
+    }
+
+    if (const std::optional<std::string> solution_node_ids =
+            readArrayFieldOptional(json, "solution_node_ids")) {
+        result.solution_node_ids = readIntArray(*solution_node_ids);
+    }
+
+    if (const std::optional<std::string> solution_path_frame_starts =
+            readArrayFieldOptional(json, "solution_path_frame_starts")) {
+        result.solution_path_frame_starts =
+            readIntArray(*solution_path_frame_starts);
+    }
+
+    if (const std::optional<std::string> search_tree =
+            readArrayFieldOptional(json, "search_tree")) {
+        result.search_tree = readSearchTreeArray(*search_tree);
     }
 
     if (result.paths.empty()) {
@@ -462,8 +559,13 @@ int main(int argc, char* argv[]) {
         }
         std::cout << '\n';
         std::cout << "  samples: " << selected.samples.size() << '\n';
+        std::cout << "  search_tree_edges: "
+                  << result.search_tree.size() << '\n';
 
-        FltkViewer viewer(result.map, result.vehicle, selected.samples);
+        FltkViewer viewer(result.map, result.vehicle, selected.samples,
+                          result.search_tree,
+                          result.solution_node_ids,
+                          result.solution_path_frame_starts);
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';

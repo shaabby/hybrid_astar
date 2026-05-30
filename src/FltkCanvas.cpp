@@ -49,11 +49,17 @@ FltkCanvas::FltkCanvas(int x,
                        int h,
                        const GridMap& map,
                        const VehicleConfig& vehicle,
-                       const std::vector<CarPose>& path)
+                       const std::vector<CarPose>& path,
+                       const std::vector<SearchTreeEdge>& search_tree,
+                       const std::vector<int>& solution_node_ids,
+                       const std::vector<int>& solution_path_frame_starts)
     : Fl_Widget(x, y, w, h),
       map_(map),
       vehicle_(vehicle),
-      path_(path) {}
+      path_(path),
+      search_tree_(search_tree),
+      solution_node_ids_(solution_node_ids),
+      solution_path_frame_starts_(solution_path_frame_starts) {}
 
 /**
  * @brief 设置当前帧号并重绘
@@ -119,6 +125,7 @@ void FltkCanvas::draw() {
     drawPoseMarker(map_.start(), 0x16a34a, "S");
     drawPoseMarker(map_.goal(), 0xdc2626, "G");
     drawPath();
+    drawCurrentSearchBranches();
 
     // 绘制当前帧对应的车辆姿态
     if (!path_.empty()) {
@@ -222,6 +229,64 @@ void FltkCanvas::drawPath() const {
             static_cast<int>(std::round(worldY(b.y))));
     }
 
+    fl_line_style(0);
+}
+
+std::size_t FltkCanvas::currentSolutionNodeIndex() const {
+    if (solution_node_ids_.empty() || solution_path_frame_starts_.empty()) {
+        return 0;
+    }
+
+    const int current_frame = std::clamp(frame_, 0, std::max(0, frameCount() - 1));
+    std::size_t selected = 0;
+    const std::size_t count = std::min(
+        solution_node_ids_.size(), solution_path_frame_starts_.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        if (solution_path_frame_starts_[i] <= current_frame) {
+            selected = i;
+        } else {
+            break;
+        }
+    }
+    return selected;
+}
+
+void FltkCanvas::drawCurrentSearchBranches() const {
+    if (solution_node_ids_.empty() || solution_path_frame_starts_.empty()) {
+        return;
+    }
+
+    fl_color(rgb(0xdc2626));
+    fl_line_style(FL_SOLID, 2);
+    const std::size_t last_solution_index = currentSolutionNodeIndex();
+    const std::size_t count = std::min(
+        solution_node_ids_.size(), last_solution_index + 1);
+    for (std::size_t solution_index = 0; solution_index < count; ++solution_index) {
+        const int node_id = solution_node_ids_[solution_index];
+        for (const SearchTreeEdge& edge : search_tree_) {
+            if (edge.parent != node_id || !edge.accepted || edge.in_solution) {
+                continue;
+            }
+            if (edge.segment.empty()) {
+                fl_line(
+                    static_cast<int>(std::round(worldX(edge.from.x))),
+                    static_cast<int>(std::round(worldY(edge.from.y))),
+                    static_cast<int>(std::round(worldX(edge.to.x))),
+                    static_cast<int>(std::round(worldY(edge.to.y))));
+                continue;
+            }
+
+            CarPose previous = edge.from;
+            for (const CarPose& pose : edge.segment) {
+                fl_line(
+                    static_cast<int>(std::round(worldX(previous.x))),
+                    static_cast<int>(std::round(worldY(previous.y))),
+                    static_cast<int>(std::round(worldX(pose.x))),
+                    static_cast<int>(std::round(worldY(pose.y))));
+                previous = pose;
+            }
+        }
+    }
     fl_line_style(0);
 }
 
