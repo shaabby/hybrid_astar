@@ -29,6 +29,7 @@ struct LoadedResult {
     std::vector<int> solution_node_ids;
     std::vector<int> solution_open_orders;
     std::vector<int> solution_close_orders;
+    std::vector<int> solution_pop_orders;
     std::vector<int> solution_path_frame_starts;
 };
 
@@ -291,6 +292,7 @@ SearchTreeEdge readSearchTreeEdge(const std::string& object) {
     edge.child = readIntField(object, "child", -1, false);
     edge.open_order = readIntField(object, "open_order", -1, false);
     edge.close_order = readIntField(object, "close_order", -1, false);
+    edge.pop_order = readIntField(object, "pop_order", -1, false);
     edge.accepted = readBoolField(object, "accepted", false, false);
     edge.collision = readBoolField(object, "collision", false, false);
     edge.duplicate = readBoolField(object, "duplicate", false, false);
@@ -444,6 +446,10 @@ LoadedResult loadResultJson(const std::filesystem::path& json_path) {
             readArrayFieldOptional(json, "solution_close_orders")) {
         result.solution_close_orders = readIntArray(*solution_close_orders);
     }
+    if (const std::optional<std::string> solution_pop_orders =
+            readArrayFieldOptional(json, "solution_pop_orders")) {
+        result.solution_pop_orders = readIntArray(*solution_pop_orders);
+    }
 
     if (const std::optional<std::string> solution_path_frame_starts =
             readArrayFieldOptional(json, "solution_path_frame_starts")) {
@@ -581,6 +587,7 @@ int main(int argc, char* argv[]) {
                           result.solution_node_ids,
                           result.solution_open_orders,
                           result.solution_close_orders,
+                          result.solution_pop_orders,
                           result.solution_path_frame_starts);
         return viewer.run();
     } catch (const std::exception& error) {

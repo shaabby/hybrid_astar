@@ -41,6 +41,7 @@ public:
                const std::vector<int>& solution_node_ids,
                const std::vector<int>& solution_open_orders,
                const std::vector<int>& solution_close_orders,
+               const std::vector<int>& solution_pop_orders,
                const std::vector<int>& solution_path_frame_starts);
 
     /** @brief 进入FLTK事件循环，返回窗口关闭状态。 */
@@ -78,6 +79,7 @@ private:
     const std::vector<int>& solution_node_ids_;          ///< 最终解节点 id 引用
     const std::vector<int>& solution_open_orders_;       ///< 解节点open顺序引用
     const std::vector<int>& solution_close_orders_;      ///< 解节点close顺序引用
+    const std::vector<int>& solution_pop_orders_;      ///< 解节点pop顺序引用
     const std::vector<int>& solution_path_frame_starts_; ///< 解节点路径帧引用
     std::unique_ptr<Fl_Double_Window> window_;          ///< 主窗口
     FltkCanvas* canvas_ = nullptr;                      ///< 画布组件

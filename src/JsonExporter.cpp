@@ -32,8 +32,10 @@ std::string JsonExporter::exportPath(const GridMap& map,
                                           solution_open_orders,
                                       const std::vector<int>&
                                           solution_close_orders,
-                                      const std::vector<int>&
-                                          solution_path_frame_starts) {
+                                          const std::vector<int>&
+                                              solution_pop_orders,
+                                          const std::vector<int>&
+                                              solution_path_frame_starts) {
     std::ostringstream out;
     out << std::fixed << std::setprecision(6);
     out << "{\n";
@@ -48,6 +50,8 @@ std::string JsonExporter::exportPath(const GridMap& map,
         << exportIntArray(solution_open_orders) << ",\n";
     out << "  \"solution_close_orders\": "
         << exportIntArray(solution_close_orders) << ",\n";
+    out << "  \"solution_pop_orders\": "
+        << exportIntArray(solution_pop_orders) << ",\n";
     out << "  \"solution_path_frame_starts\": "
         << exportIntArray(solution_path_frame_starts) << ",\n";
     out << "  \"search_tree\": " << exportSearchTree(search_tree) << "\n";
@@ -164,6 +168,7 @@ std::string JsonExporter::exportSearchTree(
         out << "      \"child\": " << edge.child << ",\n";
         out << "      \"open_order\": " << edge.open_order << ",\n";
         out << "      \"close_order\": " << edge.close_order << ",\n";
+                out << "      \"pop_order\": " << edge.pop_order << ",\n";
         out << "      \"accepted\": " << (edge.accepted ? "true" : "false") << ",\n";
         out << "      \"collision\": " << (edge.collision ? "true" : "false") << ",\n";
         out << "      \"duplicate\": " << (edge.duplicate ? "true" : "false") << ",\n";

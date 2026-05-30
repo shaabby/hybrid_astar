@@ -39,6 +39,7 @@ public:
                const std::vector<int>& solution_node_ids,
                const std::vector<int>& solution_open_orders,
                const std::vector<int>& solution_close_orders,
+                       const std::vector<int>& solution_pop_orders,
                const std::vector<int>& solution_path_frame_starts);
 
     /**
@@ -82,6 +83,7 @@ private:
     const std::vector<int>& solution_node_ids_; ///< 最终解节点 id 引用
     const std::vector<int>& solution_open_orders_; ///< 解节点open顺序引用
     const std::vector<int>& solution_close_orders_; ///< 解节点close顺序引用
+    const std::vector<int>& solution_pop_orders_; ///< 解节点pop顺序引用
     const std::vector<int>& solution_path_frame_starts_; ///< 解节点路径帧引用
     int frame_ = 0;                      ///< 当前帧号
 };

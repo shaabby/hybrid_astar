@@ -55,6 +55,7 @@ FltkCanvas::FltkCanvas(int x,
                        const std::vector<int>& solution_node_ids,
                        const std::vector<int>& solution_open_orders,
                        const std::vector<int>& solution_close_orders,
+                       const std::vector<int>& solution_pop_orders,
                        const std::vector<int>& solution_path_frame_starts)
     : Fl_Widget(x, y, w, h),
       map_(map),
@@ -64,6 +65,7 @@ FltkCanvas::FltkCanvas(int x,
       solution_node_ids_(solution_node_ids),
       solution_open_orders_(solution_open_orders),
       solution_close_orders_(solution_close_orders),
+      solution_pop_orders_(solution_pop_orders),
       solution_path_frame_starts_(solution_path_frame_starts) {}
 
 /**
@@ -257,7 +259,8 @@ std::size_t FltkCanvas::currentSolutionNodeIndex() const {
 }
 
 void FltkCanvas::drawCurrentSearchBranches() const {
-    if (search_tree_.empty() || solution_close_orders_.empty()) {
+    if (search_tree_.empty() || solution_open_orders_.empty()
+        || solution_pop_orders_.empty()) {
         return;
     }
 
@@ -265,16 +268,23 @@ void FltkCanvas::drawCurrentSearchBranches() const {
     fl_line_style(FL_SOLID, 1);
 
     const std::size_t solution_index = currentSolutionNodeIndex();
-    const int begin_order = solution_close_orders_.front();
-    const int end_order = solution_index + 1 < solution_close_orders_.size()
-        ? solution_close_orders_[solution_index + 1]
+    // 打开窗口：累积画到下一个解节点进入 open 之前
+    const int open_end = solution_index + 1 < solution_open_orders_.size()
+        ? solution_open_orders_[solution_index + 1]
+        : std::numeric_limits<int>::max();
+    // 剪枝窗口：剪除已弹出但未进入 closed 的边
+    const int prune_end = solution_index < solution_pop_orders_.size()
+        ? solution_pop_orders_[solution_index]
         : std::numeric_limits<int>::max();
 
     for (const SearchTreeEdge& edge : search_tree_) {
         if (!edge.accepted || edge.in_solution
-            || edge.close_order < 0
-            || edge.close_order <= begin_order
-            || edge.close_order >= end_order) {
+            || edge.open_order <= 0
+            || edge.open_order >= open_end) {
+            continue;
+        }
+        if (edge.close_order < 0 && edge.pop_order > 0
+            && edge.pop_order <= prune_end) {
             continue;
         }
         if (edge.segment.empty()) {

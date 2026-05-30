@@ -136,7 +136,8 @@ int main(int argc, char* argv[]) {
         const std::string json = JsonExporter::exportPath(
             map, car, plan.path, plan.expanded, plan.search_tree,
             plan.solution_node_ids, plan.solution_open_orders,
-            plan.solution_close_orders, plan.solution_path_frame_starts);
+            plan.solution_close_orders, plan.solution_pop_orders,
+            plan.solution_path_frame_starts);
         debugStage("write output files");
         writeTextFile("output/result.json", json);
 

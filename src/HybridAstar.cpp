@@ -65,6 +65,7 @@ struct Node {
     int parent = -1;       ///< 父节点在 nodes 数组中的索引，-1 表示起点
     int open_order = -1;   ///< 进入 open set 的顺序
     int close_order = -1;  ///< 进入 closed set 的顺序
+    int pop_order = -1;  ///< 从 open 弹出的顺序
     std::vector<CarPose> segment; ///< 从父节点运动到本节点的连续轨迹
 };
 
@@ -370,9 +371,12 @@ void setSuccessfulSearchResult(PlanResult& result,
     result.solution_close_orders.clear();
     result.solution_open_orders.reserve(result.solution_node_ids.size());
     result.solution_close_orders.reserve(result.solution_node_ids.size());
+    result.solution_pop_orders.clear();
+    result.solution_pop_orders.reserve(result.solution_node_ids.size());
     for (int node_id : result.solution_node_ids) {
         result.solution_open_orders.push_back(nodes[node_id].open_order);
         result.solution_close_orders.push_back(nodes[node_id].close_order);
+        result.solution_pop_orders.push_back(nodes[node_id].pop_order);
     }
     result.path = reconstructPathFromIds(
         nodes, result.solution_node_ids,
@@ -452,8 +456,10 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
     start_node.g = 0.0;
     start_node.f = start_node.h;
     int next_open_order = 0;
+    int next_pop_order = 0;
     int next_close_order = 0;
     start_node.open_order = next_open_order++;
+    start_node.pop_order = next_pop_order++;
     nodes.push_back(start_node);
     node_edge_indices.push_back(-1);
 
@@ -513,6 +519,12 @@ PlanResult HybridAstar::plan(const GridMap& map, const Car& car) const {
         open.pop();
 
         const int current_id = current_entry.node_id;
+        const int pop_order = next_pop_order++;
+        nodes[static_cast<std::size_t>(current_id)].pop_order = pop_order;
+        const int edge_idx = node_edge_indices[static_cast<std::size_t>(current_id)];
+        if (edge_idx >= 0) {
+            result.search_tree[static_cast<std::size_t>(edge_idx)].pop_order = pop_order;
+        }
         const Node current = nodes[current_id];
         const StateKey current_key = makeKey(current);
 
