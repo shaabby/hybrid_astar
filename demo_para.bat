@@ -3,8 +3,8 @@ setlocal
 
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "BUILD_DIR=%SCRIPT_DIR%build"
-set "CMAKE_DIR=%SCRIPT_DIR%cmake\bin"
+set "BUILD_DIR=%SCRIPT_DIR%\build"
+set "CMAKE_DIR=%SCRIPT_DIR%\cmake\bin"
 set "BUILD_TYPE=Release"
 set "TESTBENCH=%BUILD_DIR%\hybrid_astar_testbench.exe"
 set "GROUPS_FILE=config/testbench/demo_para/groups.txt"
@@ -19,14 +19,15 @@ if not exist "%CMAKE_DIR%\cmake.exe" (
     exit /b 1
 )
 
-if not exist "%MAP_SOURCE%" (
-    echo Error: Map not found: %MAP_SOURCE%
-    exit /b 1
-)
-
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 
 pushd "%SCRIPT_DIR%" >nul
+
+if not exist "%MAP_SOURCE%" (
+    popd >nul
+    echo Error: Map not found: %MAP_SOURCE%
+    exit /b 1
+)
 
 if not exist "%BUILD_DIR%\CMakeCache.txt" (
     echo [demo-para] Configuring CMake ^(%BUILD_TYPE%^)...
@@ -44,6 +45,10 @@ if errorlevel 1 (
     popd >nul
     echo Build failed
     exit /b 1
+)
+
+if exist "%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar_testbench.exe" (
+    set "TESTBENCH=%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar_testbench.exe"
 )
 
 if not exist "%TESTBENCH%" (

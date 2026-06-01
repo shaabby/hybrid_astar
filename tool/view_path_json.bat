@@ -58,6 +58,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if exist "%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe" (
+    set "EXECUTABLE=%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe"
+)
+
 if not exist "%EXECUTABLE%" (
     popd >nul
     echo [view-path] Could not find path_json_viewer executable.

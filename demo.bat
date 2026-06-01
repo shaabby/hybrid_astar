@@ -3,8 +3,8 @@ setlocal
 
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "BUILD_DIR=%SCRIPT_DIR%build"
-set "CMAKE_DIR=%SCRIPT_DIR%cmake\bin"
+set "BUILD_DIR=%SCRIPT_DIR%\build"
+set "CMAKE_DIR=%SCRIPT_DIR%\cmake\bin"
 set "BUILD_TYPE=Release"
 set "TESTBENCH=%BUILD_DIR%\hybrid_astar_testbench.exe"
 set "OUTPUT_CSV=output\demo.csv"
@@ -37,6 +37,10 @@ if errorlevel 1 (
     popd >nul
     echo Build failed
     exit /b 1
+)
+
+if exist "%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar_testbench.exe" (
+    set "TESTBENCH=%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar_testbench.exe"
 )
 
 if not exist "%TESTBENCH%" (
