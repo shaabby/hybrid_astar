@@ -13,7 +13,6 @@
 #include "HybridAstar.hpp"
 
 #include <FL/Fl_Widget.H>
-#include <FL/fl_draw.H>
 
 #include <vector>
 
@@ -43,8 +42,6 @@ public:
                        const std::vector<int>& solution_pop_orders,
                const std::vector<int>& solution_path_frame_starts);
 
-    ~FltkCanvas() override;
-
     /**
      * @brief 设置当前显示帧号
      * @param[in] frame 帧号索引
@@ -59,7 +56,6 @@ public:
 
 private:
     void draw() override;
-    void resize(int x, int y, int w, int h) override;
 
     [[nodiscard]] double scale() const;
     [[nodiscard]] double worldX(double value) const;
@@ -90,11 +86,4 @@ private:
     const std::vector<int>& solution_pop_orders_; ///< 解节点pop顺序引用
     const std::vector<int>& solution_path_frame_starts_; ///< 解节点路径帧引用
     int frame_ = 0;                      ///< 当前帧号
-
-    Fl_Offscreen static_layer_ = 0; ///< 静态层缓存（grid+obstacles+markers）
-    bool static_dirty_ = true;           ///< 静态层是否需要重绘
-    bool rendering_offscreen_ = false;   ///< 是否正在渲染到offscreen
-
-    /** @brief 渲染静态层到offscreen缓存。 */
-    void renderStaticLayer();
 };

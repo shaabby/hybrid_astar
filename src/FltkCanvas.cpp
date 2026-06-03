@@ -68,47 +68,6 @@ FltkCanvas::FltkCanvas(int x,
       solution_pop_orders_(solution_pop_orders),
       solution_path_frame_starts_(solution_path_frame_starts) {}
 
-FltkCanvas::~FltkCanvas() {
-    if (static_layer_) {
-        fl_delete_offscreen(static_layer_);
-    }
-}
-
-void FltkCanvas::resize(int rx, int ry, int rw, int rh) {
-    if (rw != w() || rh != h()) {
-        if (static_layer_) {
-            fl_delete_offscreen(static_layer_);
-            static_layer_ = 0;
-        }
-        static_dirty_ = true;
-    }
-    Fl_Widget::resize(rx, ry, rw, rh);
-}
-
-void FltkCanvas::renderStaticLayer() {
-    if (static_layer_) {
-        fl_delete_offscreen(static_layer_);
-    }
-    static_layer_ = fl_create_offscreen(w(), h());
-
-    rendering_offscreen_ = true;
-    fl_begin_offscreen(static_layer_);
-
-    fl_color(rgb(0xffffff));
-    fl_rectf(0, 0, w(), h());
-    fl_color(rgb(0xcfd6df));
-    fl_rect(0, 0, w(), h());
-
-    drawGrid();
-    drawObstacles();
-    drawPoseMarker(map_.start(), 0x16a34a, "S");
-    drawPoseMarker(map_.goal(), 0xdc2626, "G");
-
-    fl_end_offscreen();
-    rendering_offscreen_ = false;
-    static_dirty_ = false;
-}
-
 /**
  * @brief 设置当前帧号并重绘
  * @param[in] frame 帧号
@@ -146,11 +105,7 @@ double FltkCanvas::scale() const {
  * @return 屏幕坐标
  */
 double FltkCanvas::worldX(double value) const {
-    double cx = kMargin + value * scale();
-    if (!rendering_offscreen_) {
-        cx += static_cast<double>(x());
-    }
-    return cx;
+    return static_cast<double>(x()) + kMargin + value * scale();
 }
 
 /**
@@ -161,28 +116,25 @@ double FltkCanvas::worldX(double value) const {
  * Y轴翻转：世界坐标系Y向上为正，画布Y向下为正。
  */
 double FltkCanvas::worldY(double value) const {
-    double cy = kMargin
+    return static_cast<double>(y()) + kMargin
         + (static_cast<double>(map_.height()) - value) * scale();
-    if (!rendering_offscreen_) {
-        cy += static_cast<double>(y());
-    }
-    return cy;
 }
 
 /** @brief FLTK重绘回调，绘制整个场景。 */
 void FltkCanvas::draw() {
-    // 渲染静态层（仅首次或resize后）
-    if (static_dirty_ || !static_layer_) {
-        renderStaticLayer();
-    }
+    fl_color(rgb(0xffffff));
+    fl_rectf(x(), y(), w(), h());
+    fl_color(rgb(0xcfd6df));
+    fl_rect(x(), y(), w(), h());
 
-    // 拷贝静态层到屏幕
-    fl_copy_offscreen(x(), y(), w(), h(), static_layer_, 0, 0);
-
-    // 绘制动态内容
+    drawGrid();
+    drawObstacles();
+    drawPoseMarker(map_.start(), 0x16a34a, "S");
+    drawPoseMarker(map_.goal(), 0xdc2626, "G");
     drawPath();
     drawCurrentSearchBranches();
 
+    // 绘制当前帧对应的车辆姿态
     if (!path_.empty()) {
         drawCar(path_[static_cast<std::size_t>(frame_)]);
     }
