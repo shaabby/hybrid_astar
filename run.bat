@@ -2,66 +2,89 @@
 setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
-set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "BUILD_DIR=%SCRIPT_DIR%\build"
-set "CMAKE_DIR=%SCRIPT_DIR%\cmake\bin"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+set "BUILD_DIR=%ROOT_DIR%\build"
 set "BUILD_TYPE=Release"
-set "EXECUTABLE=%BUILD_DIR%\hybrid_astar.exe"
+set "EXECUTABLE=%BUILD_DIR%\path_json_viewer.exe"
+set "TARGET=output\result.json"
+set "VIEWER_ARGS="
+set "HAS_TARGET="
 
-if not exist "%CMAKE_DIR%\cmake.exe" (
-    echo Error: CMake not found at %CMAKE_DIR%\cmake.exe
-    echo Please download CMake from https://github.com/Kitware/CMake/releases
-    exit /b 1
+if /I "%~1"=="--help" goto :usage
+if /I "%~1"=="-h" goto :usage
+
+:parse_args
+if "%~1"=="" goto :args_done
+if not defined HAS_TARGET (
+    set "FIRST=%~1"
+    if not "!FIRST:~0,2!"=="--" (
+        set "TARGET=%~1"
+        set "HAS_TARGET=1"
+        shift
+        goto :parse_args
+    )
 )
+set "VIEWER_ARGS=%VIEWER_ARGS% "%~1""
+shift
+goto :parse_args
 
-if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
-
-pushd "%SCRIPT_DIR%" >nul
-
-if not exist "%BUILD_DIR%\CMakeCache.txt" (
-    echo [run] Configuring CMake ^(%BUILD_TYPE%^)...
-    "%CMAKE_DIR%\cmake.exe" -S "%SCRIPT_DIR%" -B "%BUILD_DIR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
-    if errorlevel 1 (
-        popd >nul
-        echo CMake configuration failed
-        exit /b 1
+:args_done
+if not exist "%EXECUTABLE%" (
+    if exist "%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe" (
+        set "EXECUTABLE=%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe"
     )
 )
 
-echo [run] Building hybrid_astar...
-"%CMAKE_DIR%\cmake.exe" --build "%BUILD_DIR%" --config %BUILD_TYPE% --target hybrid_astar
-if errorlevel 1 (
-    popd >nul
-    echo Build failed
-    exit /b 1
-)
-
-if exist "%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar.exe" (
-    set "EXECUTABLE=%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar.exe"
-)
-
 if not exist "%EXECUTABLE%" (
-    popd >nul
-    echo Error: Executable not found: %EXECUTABLE%
+    echo [view-path] Could not find path_json_viewer executable.
+    echo Please build first using build.bat
     exit /b 1
 )
 
-if "%~1"=="" (
-    echo [run] Running config/default.yaml...
-    "%EXECUTABLE%" config/default.yaml
-) else (
-    echo [run] Running %*
-    "%EXECUTABLE%" %*
+if exist "%TARGET%\*" (
+    set "COUNT=0"
+    for /f "delims=" %%F in ('dir /b /a:-d /o:n "%TARGET%\*.json" 2^>nul') do (
+        set /a COUNT+=1
+    )
+    if "!COUNT!"=="0" (
+        popd >nul
+        echo [view-path] No *.json files found in directory: %TARGET%
+        exit /b 1
+    )
+
+    echo [view-path] Opening !COUNT! JSON file^(s^) from %TARGET%...
+    set "INDEX=0"
+    for /f "delims=" %%F in ('dir /b /a:-d /o:n "%TARGET%\*.json" 2^>nul') do (
+        set /a INDEX+=1
+        echo [view-path] [!INDEX!/!COUNT!] %TARGET%\%%F
+        call "%EXECUTABLE%" "%TARGET%\%%F"%VIEWER_ARGS%
+        if errorlevel 1 (
+            popd >nul
+            exit /b 1
+        )
+    )
+    popd >nul
+    exit /b 0
 )
 
-if errorlevel 1 (
+if not exist "%TARGET%" (
     popd >nul
+    echo [view-path] JSON file or directory not found: %TARGET%
     exit /b 1
 )
 
-echo.
-echo [run] Opening output\result.json in path_json_viewer...
-call tool\view_path_json.bat output\result.json
+echo [view-path] Opening %TARGET%...
+call "%EXECUTABLE%" "%TARGET%"%VIEWER_ARGS%
 set "EXIT_CODE=%ERRORLEVEL%"
 popd >nul
 exit /b %EXIT_CODE%
+
+:usage
+echo Usage: %~nx0 [result.json^|json_dir] [--path name^|index]
+echo        %~nx0 [result.json^|json_dir] --list
+echo        %~nx0 --list
+echo        %~nx0 --help
+echo.
+echo If no JSON file or directory is provided, defaults to output\result.json.
+echo If a directory is provided, opens all *.json files in that directory in sorted order.
+exit /b 0
