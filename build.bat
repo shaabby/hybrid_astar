@@ -4,14 +4,13 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BUILD_DIR=%SCRIPT_DIR%\build"
-set "CMAKE_DIR=%SCRIPT_DIR%\cmake\bin"
 set "BUILD_TYPE=Release"
 
 echo === Building all targets ===
 
-if not exist "%CMAKE_DIR%\cmake.exe" (
-    echo Error: CMake not found at %CMAKE_DIR%\cmake.exe
-    echo Please download CMake from https://github.com/Kitware/CMake/releases
+where cmake >nul 2>&1
+if errorlevel 1 (
+    echo Error: cmake not found in PATH
     exit /b 1
 )
 
@@ -22,7 +21,7 @@ pushd "%SCRIPT_DIR%" >nul
 if not exist "%BUILD_DIR%\CMakeCache.txt" (
     echo.
     echo [1/2] Running CMake...
-    "%CMAKE_DIR%\cmake.exe" -S "%SCRIPT_DIR%" -B "%BUILD_DIR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+    cmake -S "%SCRIPT_DIR%" -B "%BUILD_DIR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
     if errorlevel 1 (
         popd >nul
         echo CMake configuration failed
@@ -32,7 +31,7 @@ if not exist "%BUILD_DIR%\CMakeCache.txt" (
 
 echo.
 echo [2/2] Building...
-"%CMAKE_DIR%\cmake.exe" --build "%BUILD_DIR%" --config %BUILD_TYPE%
+cmake --build "%BUILD_DIR%" --config %BUILD_TYPE%
 if errorlevel 1 (
     popd >nul
     echo Build failed
