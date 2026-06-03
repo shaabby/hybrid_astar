@@ -42,6 +42,8 @@ public:
                        const std::vector<int>& solution_pop_orders,
                const std::vector<int>& solution_path_frame_starts);
 
+    ~FltkCanvas() override;
+
     /**
      * @brief 设置当前显示帧号
      * @param[in] frame 帧号索引
@@ -76,6 +78,11 @@ private:
     /** @brief 绘制车辆轮廓。 */
     void drawCar(const CarPose& pose) const;
 
+    /** @brief 确保离屏缓冲区存在且尺寸正确。 */
+    void ensureOffscreen();
+    /** @brief 将静态背景和搜索树渲染到离屏缓冲区。 */
+    void renderOffscreen();
+
     const GridMap& map_;                 ///< 地图引用
     const VehicleConfig& vehicle_;       ///< 车辆配置引用
     const std::vector<CarPose>& path_;   ///< 路径采样点引用
@@ -86,4 +93,14 @@ private:
     const std::vector<int>& solution_pop_orders_; ///< 解节点pop顺序引用
     const std::vector<int>& solution_path_frame_starts_; ///< 解节点路径帧引用
     int frame_ = 0;                      ///< 当前帧号
+
+    // 离屏缓冲区缓存
+    Fl_Offscreen composite_offscreen_ = 0;
+    std::size_t cached_tree_index_ = static_cast<std::size_t>(-1);
+    int cached_w_ = 0;
+    int cached_h_ = 0;
+
+    // 坐标原点偏移，支持离屏绘制 (0,0) 和屏幕绘制 (x(), y())
+    mutable int draw_origin_x_ = 0;
+    mutable int draw_origin_y_ = 0;
 };

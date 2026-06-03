@@ -68,6 +68,13 @@ FltkCanvas::FltkCanvas(int x,
       solution_pop_orders_(solution_pop_orders),
       solution_path_frame_starts_(solution_path_frame_starts) {}
 
+FltkCanvas::~FltkCanvas() {
+    if (composite_offscreen_) {
+        fl_delete_offscreen(composite_offscreen_);
+        composite_offscreen_ = 0;
+    }
+}
+
 /**
  * @brief 设置当前帧号并重绘
  * @param[in] frame 帧号
@@ -105,7 +112,7 @@ double FltkCanvas::scale() const {
  * @return 屏幕坐标
  */
 double FltkCanvas::worldX(double value) const {
-    return static_cast<double>(x()) + kMargin + value * scale();
+    return static_cast<double>(draw_origin_x_) + kMargin + value * scale();
 }
 
 /**
@@ -116,25 +123,58 @@ double FltkCanvas::worldX(double value) const {
  * Y轴翻转：世界坐标系Y向上为正，画布Y向下为正。
  */
 double FltkCanvas::worldY(double value) const {
-    return static_cast<double>(y()) + kMargin
+    return static_cast<double>(draw_origin_y_) + kMargin
         + (static_cast<double>(map_.height()) - value) * scale();
 }
 
-/** @brief FLTK重绘回调，绘制整个场景。 */
+/** @brief FLTK重绘回调，利用离屏缓冲区缓存静态内容。 */
 void FltkCanvas::draw() {
-    fl_color(rgb(0xffffff));
-    fl_rectf(x(), y(), w(), h());
-    fl_color(rgb(0xcfd6df));
-    fl_rect(x(), y(), w(), h());
+    if (w() <= 0 || h() <= 0) {
+        return;
+    }
 
-    drawGrid();
-    drawObstacles();
-    drawPoseMarker(map_.start(), 0x16a34a, "S");
-    drawPoseMarker(map_.goal(), 0xdc2626, "G");
+    const std::size_t current_idx = currentSolutionNodeIndex();
+
+    // 在以下情况重建离屏缓冲区：
+    //   - 尚未创建
+    //   - 窗口尺寸改变
+    //   - 搜索树的可视范围改变（解节点切换）
+    if (!composite_offscreen_
+        || w() != cached_w_
+        || h() != cached_h_
+        || cached_tree_index_ != current_idx) {
+
+        ensureOffscreen();
+        if (composite_offscreen_) {
+            renderOffscreen();
+        }
+        cached_w_ = w();
+        cached_h_ = h();
+        cached_tree_index_ = current_idx;
+    }
+
+    if (composite_offscreen_) {
+        // 将缓存好的离屏缓冲区复制到屏幕
+        fl_copy_offscreen(x(), y(), w(), h(), composite_offscreen_, 0, 0);
+    } else {
+        // 离屏缓冲区创建失败时的 fallback 路径
+        draw_origin_x_ = x();
+        draw_origin_y_ = y();
+        fl_color(rgb(0xffffff));
+        fl_rectf(x(), y(), w(), h());
+        fl_color(rgb(0xcfd6df));
+        fl_rect(x(), y(), w(), h());
+        drawGrid();
+        drawObstacles();
+        drawPoseMarker(map_.start(), 0x16a34a, "S");
+        drawPoseMarker(map_.goal(), 0xdc2626, "G");
+        drawCurrentSearchBranches();
+    }
+
+    // 动态元素：每帧直接绘制到屏幕
+    draw_origin_x_ = x();
+    draw_origin_y_ = y();
     drawPath();
-    drawCurrentSearchBranches();
-
-    // 绘制当前帧对应的车辆姿态
     if (!path_.empty()) {
         drawCar(path_[static_cast<std::size_t>(frame_)]);
     }
@@ -363,4 +403,33 @@ void FltkCanvas::drawCar(const CarPose& pose) const {
     fl_line(rear_x, rear_y, front_x, front_y);
     fl_pie(rear_x - 4, rear_y - 4, 8, 8, 0.0, 360.0);
     fl_line_style(0);
+}
+
+void FltkCanvas::ensureOffscreen() {
+    if (composite_offscreen_) {
+        fl_delete_offscreen(composite_offscreen_);
+        composite_offscreen_ = 0;
+    }
+    if (w() > 0 && h() > 0) {
+        composite_offscreen_ = fl_create_offscreen(w(), h());
+    }
+}
+
+void FltkCanvas::renderOffscreen() {
+    fl_begin_offscreen(composite_offscreen_);
+
+    draw_origin_x_ = 0;
+    draw_origin_y_ = 0;
+
+    fl_color(rgb(0xffffff));
+    fl_rectf(0, 0, w(), h());
+    fl_color(rgb(0xcfd6df));
+    fl_rect(0, 0, w(), h());
+    drawGrid();
+    drawObstacles();
+    drawPoseMarker(map_.start(), 0x16a34a, "S");
+    drawPoseMarker(map_.goal(), 0xdc2626, "G");
+    drawCurrentSearchBranches();
+
+    fl_end_offscreen();
 }
