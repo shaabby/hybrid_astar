@@ -4,6 +4,7 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BUILD_DIR=%SCRIPT_DIR%\build"
+set "CMAKE_DIR=%SCRIPT_DIR%\cmake\bin"
 set "BUILD_TYPE=Release"
 set "TESTBENCH=%BUILD_DIR%\hybrid_astar_testbench.exe"
 set "OUTPUT_CSV=output\demo.csv"
@@ -16,8 +17,8 @@ if exist "%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar_testbench.exe" (
 )
 
 if not exist "%TESTBENCH%" (
+    popd >nul
     echo Error: Executable not found: %TESTBENCH%
-    echo Please build first using build.bat
     exit /b 1
 )
 
@@ -31,9 +32,13 @@ echo [demo] Running default config on maps in map\ ...
   --output "%OUTPUT_CSV%" ^
   --output-map-dir "%OUTPUT_MAP_DIR%"
 if errorlevel 1 (
+    popd >nul
     exit /b 1
 )
 
 echo [demo] Opening all generated path JSON files...
 call tool\view_path_json.bat "%VIEW_DIR%"
-exit /b %ERRORLEVEL%
+set "EXIT_CODE=%ERRORLEVEL%"
+
+popd >nul
+exit /b %EXIT_CODE%

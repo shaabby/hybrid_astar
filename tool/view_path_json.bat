@@ -47,6 +47,7 @@ if exist "%TARGET%\*" (
         set /a COUNT+=1
     )
     if "!COUNT!"=="0" (
+        popd >nul
         echo [view-path] No *.json files found in directory: %TARGET%
         exit /b 1
     )
@@ -58,20 +59,25 @@ if exist "%TARGET%\*" (
         echo [view-path] [!INDEX!/!COUNT!] %TARGET%\%%F
         call "%EXECUTABLE%" "%TARGET%\%%F"%VIEWER_ARGS%
         if errorlevel 1 (
+            popd >nul
             exit /b 1
         )
     )
+    popd >nul
     exit /b 0
 )
 
 if not exist "%TARGET%" (
+    popd >nul
     echo [view-path] JSON file or directory not found: %TARGET%
     exit /b 1
 )
 
 echo [view-path] Opening %TARGET%...
 call "%EXECUTABLE%" "%TARGET%"%VIEWER_ARGS%
-exit /b %ERRORLEVEL%
+set "EXIT_CODE=%ERRORLEVEL%"
+popd >nul
+exit /b %EXIT_CODE%
 
 :usage
 echo Usage: %~nx0 [result.json^|json_dir] [--path name^|index]

@@ -5,8 +5,9 @@ set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BUILD_DIR=%SCRIPT_DIR%\build"
 set "BUILD_TYPE=Release"
+set "EXECUTABLE=%BUILD_DIR%\hybrid_astar.exe"
 
-echo === Building all targets ===
+echo === Building Hybrid A* ===
 
 where cmake >nul 2>&1
 if errorlevel 1 (
@@ -38,8 +39,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
-popd >nul
+if exist "%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar.exe" (
+    set "EXECUTABLE=%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar.exe"
+)
 
 echo.
 echo === Build complete ===
-echo Executables in: %BUILD_DIR%\%BUILD_TYPE%\
+echo Executable: %EXECUTABLE%
+
+popd >nul
