@@ -51,30 +51,24 @@ demo.bat
 demo_para.bat
 ```
 
-首次使用需先构建：
-
-```bat
-build.bat
-```
-
-或手动构建：
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-```
-
-构建完成后运行：
+首次运行会自动配置并构建，默认执行：
 
 ```text
-run.bat
+config/default.yaml
 ```
 
-默认执行 `config/default.yaml`，输出文件：
+输出文件：
 
 ```text
 output/result.json
 output/single_run_timing.csv
+```
+
+手动构建：
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
 ```
 
 手动运行：
@@ -272,14 +266,11 @@ Windows 原生环境下，可执行文件通常在：
 build/Release/hybrid_astar.exe
 ```
 
-如果使用本项目附带的批处理脚本，需先运行 `build.bat` 构建，之后可直接使用：
+如果使用本项目附带的批处理脚本，则入口分别为：
 
 ```text
-build.bat           # 构建所有目标
-run.bat             # 运行主程序
-demo.bat            # 批量运行并查看结果
-demo_para.bat       # 参数对比实验
-tool\view_path_json.bat  # 查看路径 JSON
+run.bat
+tool\view_path_json.bat
 ```
 
-`build.bat` 使用环境中的 `cmake`（需在 PATH 中），不再附带项目内 cmake。
+这些脚本统一通过 `cmake --build` 调用当前生成器，因而比直接写死 `mingw32-make` 更兼容不同 Windows 构建环境。
