@@ -6,9 +6,8 @@ set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BUILD_DIR=%SCRIPT_DIR%\build"
 set "CMAKE_DIR=%SCRIPT_DIR%\cmake\bin"
 set "BUILD_TYPE=Release"
-set "EXECUTABLE=%BUILD_DIR%\hybrid_astar.exe"
 
-echo === Building Hybrid A* ===
+echo === Building all targets ===
 
 if not exist "%CMAKE_DIR%\cmake.exe" (
     echo Error: CMake not found at %CMAKE_DIR%\cmake.exe
@@ -40,12 +39,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if exist "%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar.exe" (
-    set "EXECUTABLE=%BUILD_DIR%\%BUILD_TYPE%\hybrid_astar.exe"
-)
+popd >nul
 
 echo.
 echo === Build complete ===
-echo Executable: %EXECUTABLE%
-
-popd >nul
+echo Executables in: %BUILD_DIR%\%BUILD_TYPE%\
