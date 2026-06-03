@@ -1,14 +1,6 @@
-# Hybrid A* Demo
+# Hybrid A* 路径规划 Demo
 
-一个基于 `C++23` 的 Hybrid A* 路径规划课程项目，包含：
-
-- JSON 栅格地图读取
-- 简化车辆 bicycle model
-- Hybrid A* 搜索
-- Reeds-Shepp 解析扩展
-- 路径 JSON 导出
-- 独立 FLTK 路径查看器
-- 批量实验与 CSV 日志
+基于 C++23 的 Hybrid A* 路径规划课程项目，包含 JSON 栅格地图读取、简化车辆 bicycle model、Hybrid A* 搜索、Reeds-Shepp 解析扩展、路径 JSON 导出、独立 FLTK 路径查看器及批量实验与 CSV 日志功能。
 
 典型流程：
 
@@ -16,45 +8,148 @@
 地图 JSON -> C++ 规划 -> result.json / CSV -> 独立查看器展示
 ```
 
-## 目录
+## 编译环境要求
 
-- `config/default.yaml`：默认运行配置
-- `map/`：地图与地图编辑器
-- `src/`、`include/`：核心实现
-- `tool/`：查看器与 testbench
-- `scripts/`：地图生成与实验脚本
-- `output/`：运行输出
+| 依赖 | 版本要求 | 说明 |
+|---|---|---|
+| CMake | >= 3.23 | 跨平台构建工具 |
+| C++ 编译器 | 支持 C++23 | 见下方各平台说明 |
+| Python 3 | 可选 | 仅用于地图生成脚本与对比脚本 |
+| FLTK | 内置（third_party） | 无需额外安装 |
 
-## 快速开始
+其他第三方依赖均已内嵌在 `third_party/` 目录中，不需要单独安装。
 
-推荐直接运行：
+---
 
-```bash
-./run.sh
+## 一、Windows 编译与运行
+
+### 编译器要求
+
+- **MSVC**（Visual Studio 2022 或更高，需支持 `/std:c++latest`）
+- 或 **MinGW-w64**（GCC 13+，支持 C++23）
+
+### CMake 安装
+
+从 [CMake Releases](https://github.com/Kitware/CMake/releases) 下载 Windows x64 ZIP 包，将 `cmake/bin/` 所在目录加入系统 `PATH` 环境变量。`build.bat` 会从 PATH 中查找 `cmake` 命令。
+
+### 四个 bat 脚本说明
+
+项目提供了 4 个 Windows 批处理脚本，覆盖构建、单次运行、批量实验全流程：
+
+| 脚本 | 作用 |
+|---|---|
+| `build.bat` | 编译项目，生成可执行文件 |
+| `run.bat` | 运行规划器（处理单个地图配置文件） |
+| `demo.bat` | 使用默认参数组批量运行 `map\` 目录下所有地图，并逐个展示结果 |
+| `demo_para.bat` | 在 `empty01` 地图上对比三组搜索离散参数（精细/中等/粗糙），分批展示结果 |
+
+#### build.bat
+
+自动检测 `cmake/bin/cmake.exe`，首次运行执行 CMake 配置，随后构建 Release 版可执行文件：
+
+```bat
+build.bat
 ```
 
-Windows 下可用：
+编译成功后，可执行文件位于 `build\Release\` 目录下（MSVC 生成器）或 `build\` 目录下（MinGW 生成器）。
+
+#### run.bat
+
+运行规划器，使用默认配置文件 `config/default.yaml`：
 
 ```bat
 run.bat
 ```
 
-如果要用默认配置批量运行 `map\` 下已有地图，并依次打开生成结果，可直接运行：
+也可以指定其他配置文件：
+
+```bat
+run.bat config\my_config.yaml
+```
+
+程序输出 `output\result.json` 和 `output\single_run_timing.csv`，并自动调用 FLTK 查看器展示结果。
+
+#### demo.bat
+
+批量运行 `map\` 下所有地图，每组配置输出一条 CSV 日志，查看器逐张展示生成的所有 JSON 路径：
 
 ```bat
 demo.bat
 ```
 
-如果要在 `empty01` 地图上对比三组搜索离散参数，并依次打开结果，可运行：
+#### demo_para.bat
+
+只在 `map\empty01.json` 上运行三组不同离散精度参数的对比实验（`fine` / `medium` / `coarse`），并分三批展示结果：
 
 ```bat
 demo_para.bat
 ```
 
-首次运行会自动配置并构建，默认执行：
+### 手动编译
 
-```text
-config/default.yaml
+如果不想使用 `build.bat`，可以直接调用 CMake：
+
+```bat
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+使用 MinGW 生成器时的示例：
+
+```bat
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+cmake --build build
+```
+
+### 手动运行
+
+```bat
+build\Release\hybrid_astar.exe config\default.yaml
+```
+
+---
+
+## 二、Linux (Ubuntu) 编译与运行
+
+### 编译器与依赖安装
+
+```bash
+# Ubuntu 24.04
+sudo apt install build-essential cmake g++-14
+
+# Ubuntu 22.04 需要手动安装较新的 GCC
+sudo apt install build-essential cmake g++-13
+```
+
+确保编译器支持 C++23（GCC 13+ / Clang 17+）。
+
+### 快速开始（推荐）
+
+项目根目录提供了 `run.sh` 一键脚本，自动配置 CMake、构建并运行：
+
+```bash
+./run.sh
+```
+
+### 手动编译
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+编译产物位于 `build/hybrid_astar`。
+
+如果 `/tmp` 空间不足（FLTK 编译占用较大），可以指定临时目录：
+
+```bash
+TMPDIR="$PWD/build/tmp" cmake --build build --config Release
+```
+
+### 手动运行
+
+```bash
+./build/hybrid_astar config/default.yaml
 ```
 
 输出文件：
@@ -64,71 +159,77 @@ output/result.json
 output/single_run_timing.csv
 ```
 
-手动构建：
+---
 
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-```
+## 三、查看结果
 
-手动运行：
-
-```bash
-./build/hybrid_astar config/default.yaml
-```
-
-主程序只负责规划并生成：
-
-```text
-output/result.json
-output/single_run_timing.csv
-```
-
-生成后可再调用独立查看器打开 JSON。
-
-## 查看结果
+### Windows
 
 打开单个路径 JSON：
-
-```bash
-./tool/view_path_json.sh output/result.json
-```
-
-Windows 下可用：
 
 ```bat
 tool\view_path_json.bat output\result.json
 ```
 
+打开目录下所有 JSON（批量查看）：
+
+```bat
+tool\view_path_json.bat output\demo\default
+```
+
 只列出路径，不打开窗口：
+
+```bat
+tool\view_path_json.bat output\result.json --list
+```
+
+也可以直接运行查看器：
+
+```bat
+build\Release\path_json_viewer.exe output\result.json
+```
+
+### Linux
+
+```bash
+./tool/view_path_json.sh output/result.json
+```
+
+只列出路径：
 
 ```bash
 ./tool/view_path_json.sh output/result.json --list
 ```
 
-也可以直接运行查看器：
+直接运行查看器：
 
 ```bash
 ./build/path_json_viewer output/result.json
 ```
 
-## 测试
+---
 
-运行单元测试：
+## 四、测试
+
+项目使用 CTest 管理测试：
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-当前主要测试包括：
+当前包含以下测试：
 
-- `reeds_shepp_empty_map_test`
-- `line_of_sight_test`
-- `app_config_test`
+- `reeds_shepp_empty_map_test` — Reeds-Shepp 空地图测试
+- `line_of_sight_test` — 视线检测测试
+- `app_config_test` — 配置加载测试
 
-## 批量实验
+---
 
-运行默认参数组的 testbench：
+## 五、批量实验
+
+`hybrid_astar_testbench` 支持批量参数实验。
+
+使用预定义参数组：
 
 ```bash
 ./build/hybrid_astar_testbench \
@@ -138,72 +239,62 @@ ctest --test-dir build --output-on-failure
   --output-map-dir output/default_timing_maps
 ```
 
-常用参数：
-
-- `--groups`：参数组列表
-- `--base-config`：基础配置文件，用于直接生成参数组合实验
-- `--param`：参数扫描定义，格式为 `key=v1,v2,...`，可重复指定
-- `--maps`：地图目录
-- `--output`：CSV 输出
-- `--output-map-dir`：每次规划的 JSON 输出目录
-
-除了读取现成参数组文件外，`testbench` 也支持直接做任意参数组合实验。例如：
+使用参数扫描（笛卡尔积）：
 
 ```bash
 ./build/hybrid_astar_testbench \
   --base-config config/default.yaml \
   --param hybrid_astar.xy_resolution=0.1,0.5,1 \
   --param hybrid_astar.step_size=0.1,0.5,1 \
-  --param hybrid_astar.primitive_length=0.2,0.5,1 \
   --maps map \
   --output output/param_sweep.csv \
   --output-map-dir output/param_sweep_maps
 ```
 
-这会自动生成参数笛卡尔积，并将每组结果写入同一个 CSV 与输出目录。
+参数说明：
 
-Windows 下也提供了现成脚本：
+- `--groups`：参数组文件列表
+- `--base-config`：基础配置 YAML
+- `--param`：参数扫描定义，格式 `key=v1,v2,...`，可重复指定
+- `--maps`：地图文件目录
+- `--output`：CSV 结果输出路径
+- `--output-map-dir`：每次规划的 JSON 输出目录
 
-```bat
-demo.bat
-```
+Windows 下对应可执行文件为 `build\Release\hybrid_astar_testbench.exe`。
 
-它会使用 `config/testbench/default_groups.txt` 批量运行 `map\` 目录下已有地图，并打开 `output\demo\default\` 中的结果。
+---
 
-另一个参数对比脚本：
+## 六、配置说明
 
-```bat
-demo_para.bat
-```
+主配置文件为 `config/default.yaml`，可通过 `--base-config` 或指定任意 YAML 覆盖。
 
-它会只运行 `map\empty01.json`，并比较以下三组参数：
+核心参数：
 
-- `xy_resolution=0.1`，`step_size=0.1`，`primitive_length=0.2`
-- `xy_resolution=0.5`，`step_size=0.5`，`primitive_length=0.5`
-- `xy_resolution=1`，`step_size=1`，`primitive_length=1`
+| 参数 | 说明 |
+|---|---|
+| `map_path` | 地图 JSON 文件路径 |
+| `vehicle.length / width / wheelbase / max_steer` | 车辆物理参数 |
+| `hybrid_astar.xy_resolution` | 位置去重分辨率，越小越精确但越慢 |
+| `hybrid_astar.theta_bins` | 航向角分箱数 |
+| `hybrid_astar.step_size` | 运动学积分步长 |
+| `hybrid_astar.primitive_length` | 单个运动基元总长度 |
+| `hybrid_astar.max_iterations` | 最大搜索迭代数 |
+| `hybrid_astar.enable_analytic_expansion` | 是否启用 Reeds-Shepp 直连 |
+| `hybrid_astar.enable_obstacle_heuristic` | 是否启用障碍物启发式 |
+| `hybrid_astar.obstacle_heuristic_type` | `visibility_graph` 或 `reverse_dijkstra` |
+| `hybrid_astar.reverse_penalty / steer_penalty` 等 | 代价函数惩罚系数 |
 
-对应输出：
+---
 
-```text
-output/demo_para.csv
-output/demo_para/
-```
-
-## 生成测试地图
-
-生成多尺寸固定模板地图：
+## 七、生成测试地图
 
 ```bash
-python3 scripts/generate_testbench_maps.py \
-  --output-dir map/generated \
-  --sizes 40x25 60x36 80x50
+python3 scripts/generate_testbench_maps.py --output-dir map/generated --sizes 40x25 60x36 80x50
 ```
 
-脚本会生成 `empty`、`simple`、`narrow`、`reverse`、`u`、`unreach` 等地图。
+---
 
-## 障碍物启发式对比
-
-对比 `visibility_graph` 和 `reverse_dijkstra`：
+## 八、障碍物启发式对比
 
 ```bash
 ./scripts/compare_obs_heuristics.sh \
@@ -212,65 +303,37 @@ python3 scripts/generate_testbench_maps.py \
   output/generated_obs_heuristic_compare_maps
 ```
 
-输出：
+---
 
-```text
-output/generated_obs_heuristic_compare.csv
-output/generated_obs_heuristic_compare_clean.csv
-output/generated_obs_heuristic_compare_report.md
-```
+## 九、地图编辑
 
-## 配置说明
+浏览器打开 `map/grid_demo.html` 即可编辑障碍物、起点、终点和朝向，支持导出/导入 JSON 地图文件。无需本地服务器，双击即可使用。
 
-主配置见 `config/default.yaml`，核心项包括：
+---
 
-- `map_path`：地图文件
-- `vehicle.*`：车辆尺寸和最大转向角
-- `xy_resolution`、`theta_bins`：状态离散精度
-- `step_size`、`primitive_length`：运动基元长度
-- `max_iterations`：最大搜索迭代数
-- `enable_analytic_expansion`：是否启用 Reeds-Shepp 直连
-- `enable_obstacle_heuristic`：是否启用障碍物启发式
-- `obstacle_heuristic_type`：`visibility_graph` 或 `reverse_dijkstra`
-- `enable_timing`：是否写细分计时
-- `debug`：是否输出调试日志
+## 目录结构
 
-说明：
-
-- `visibility_graph` 是当前默认障碍物启发式。
-- `obstacle_heuristic_inflation_alpha` 只影响 `reverse_dijkstra`。
-
-## 地图编辑
-
-浏览器打开：
-
-```text
-map/grid_demo.html
-```
-
-可用于编辑障碍物、起点、终点和朝向，并导出 JSON 地图。
+| 目录 | 说明 |
+|---|---|
+| `config/` | YAML 配置与 testbench 参数组 |
+| `map/` | 地图文件与 Web 地图编辑器 |
+| `src/` | 核心算法实现 |
+| `include/` | 头文件 |
+| `tool/` | 独立路径查看器与 testbench |
+| `tests/` | 自动测试程序 |
+| `scripts/` | 地图生成与实验分析脚本 |
+| `output/` | 运行输出（JSON、CSV、报告） |
+| `third_party/` | FLTK、Reeds-Shepp 等第三方依赖 |
 
 ## 常见问题
 
-`/tmp` 空间不足：
+**无图形显示环境**：主程序只负责规划并输出 JSON；跳过查看器步骤即可。
 
+**CMake 找不到**：Windows 下 `build.bat` 从系统 PATH 查找 `cmake`，请确保已安装 CMake 并加入 PATH。
+
+**编译时 `/tmp` 空间不足**：
 ```bash
 TMPDIR="$PWD/build/tmp" cmake --build build --config Release
 ```
 
-无图形显示时，主程序仍可正常生成 JSON；只需跳过 `tool/view_path_json.sh` 即可。
-
-Windows 原生环境下，可执行文件通常在：
-
-```text
-build/Release/hybrid_astar.exe
-```
-
-如果使用本项目附带的批处理脚本，则入口分别为：
-
-```text
-run.bat
-tool\view_path_json.bat
-```
-
-这些脚本统一通过 `cmake --build` 调用当前生成器，因而比直接写死 `mingw32-make` 更兼容不同 Windows 构建环境。
+**Windows 可执行文件路径**：MSVC 生成器下位于 `build/Release/`，MinGW 下位于 `build/`。
