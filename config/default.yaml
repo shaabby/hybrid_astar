@@ -1,5 +1,5 @@
 # 地图文件路径，程序启动时会从该 JSON 文件读取障碍物、起点和终点。
-map_path: map/empty01.json
+map_path: map/default_map.json
 
 # 车辆物理参数，单位为地图坐标单位；角度均使用弧度。
 vehicle:
@@ -11,7 +11,7 @@ vehicle:
 
 # Hybrid A* 路径规划器参数。
 hybrid_astar:
-  xy_resolution: 0.5                    # x/y 位置离散分辨率，用于搜索节点去重。
+  xy_resolution: 1                    # x/y 位置离散分辨率，用于搜索节点去重。
   theta_bins: 72                       # 航向角离散分箱数，数值越大角度状态越细。
   step_size: 0.5                        # 车辆运动学前向积分步长。
   primitive_length: 1                 # 每个运动基元的模拟长度。
@@ -21,7 +21,7 @@ hybrid_astar:
   steer_penalty: 1                    # 使用转向角时的代价惩罚。
   gear_switch_penalty: 1.0              # 前进和倒车方向切换时的额外代价。
   steer_change_penalty: 4.0             # 相邻运动基元转向变化的额外代价。
-  max_iterations: 300000               # 搜索循环最大迭代次数，超过后判定规划失败。
+  max_iterations: 100000              # 搜索循环最大迭代次数，超过后判定规划失败。
   allow_reverse: true                   # 是否允许规划器生成倒车运动。
   enable_analytic_expansion: true       # 是否启用 Reeds-Shepp 曲线直连目标。
   analytic_expansion_distance: 8        # 距离目标多近时允许尝试解析直连。

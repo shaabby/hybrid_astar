@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+set "ROOT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BUILD_DIR=%ROOT_DIR%\build"
 set "BUILD_TYPE=Release"
 set "EXECUTABLE=%BUILD_DIR%\path_json_viewer.exe"
@@ -31,11 +31,16 @@ goto :parse_args
 :args_done
 if not exist "%EXECUTABLE%" (
     if exist "%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe" (
+        echo Found existing executable from build: "%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe"
         set "EXECUTABLE=%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe"
     )
 )
 
+echo Found not existing executable from build: "%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe"
+
+
 if not exist "%EXECUTABLE%" (
+    echo "%EXECUTABLE%" not found.
     echo [view-path] Could not find path_json_viewer executable.
     echo Please build first using build.bat
     exit /b 1
