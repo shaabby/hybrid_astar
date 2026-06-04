@@ -1,11 +1,11 @@
-# Hybrid A* 路径规划 Demo
+# Hybrid A* 路径规划与可视化 Demo
 
-基于 C++23 的 Hybrid A* 路径规划课程项目，包含 JSON 栅格地图读取、简化车辆 bicycle model、Hybrid A* 搜索、Reeds-Shepp 解析扩展、路径 JSON 导出、独立 FLTK 路径查看器及批量实验与 CSV 日志功能。
+基于 C++23 的 Hybrid A* 路径规划与交互式可视化项目，包含 JSON 栅格地图读取、简化车辆 bicycle model、Hybrid A* 搜索、Reeds-Shepp 解析扩展、路径 JSON 导出，以及基于 FLTK 的独立路径播放与搜索树增量查看器，并支持批量实验与 CSV 日志功能。
 
 典型流程：
 
 ```text
-地图 JSON -> C++ 规划 -> result.json / CSV -> 独立查看器展示
+地图 JSON -> C++ 规划 -> result.json / CSV -> FLTK 查看器交互式回放
 ```
 
 ## 编译环境要求
