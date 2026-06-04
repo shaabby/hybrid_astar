@@ -36,9 +36,6 @@ if not exist "%EXECUTABLE%" (
     )
 )
 
-echo Found not existing executable from build: "%BUILD_DIR%\%BUILD_TYPE%\path_json_viewer.exe"
-
-
 if not exist "%EXECUTABLE%" (
     echo "%EXECUTABLE%" not found.
     echo [view-path] Could not find path_json_viewer executable.
