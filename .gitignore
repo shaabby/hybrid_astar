@@ -1,5 +1,6 @@
 /build
 .codex
+.cache/
 third_party/**/build/
 third_party/**/cmake-build-*/
 design.md
