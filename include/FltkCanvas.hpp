@@ -80,16 +80,18 @@ private:
 
     /** @brief 确保静态离屏缓冲区存在且尺寸正确。 */
     void ensureStaticOffscreen();
-    /** @brief 将静态背景和搜索树渲染到离屏缓冲区。 */
+    /** @brief 将地图背景渲染到静态离屏缓冲区（不含搜索树）。 */
     void renderStaticOffscreen();
-    /** @brief 确保帧合成离屏缓冲区存在且尺寸正确。 */
-    void ensureFrameOffscreen();
-    /** @brief 将静态底图拷贝到帧缓冲以准备增量绘制。 */
-    void resetFrameBuffer();
-    /** @brief 在帧缓冲上增量绘制路径线段 [from_frame, to_frame]。 */
-    void applyPathIncremental(int from_frame, int to_frame);
-    /** @brief 释放帧合成离屏缓冲区。 */
-    void deleteFrameOffscreen();
+    /** @brief 确保显示层离屏缓冲区存在且尺寸正确。 */
+    void ensureDisplayOffscreen();
+    /** @brief 从静态层拷贝重建显示层。 */
+    void rebuildDisplay();
+    /** @brief 向显示层追加一条路径线段 path[i-1]→path[i]。 */
+    void appendPathSegment(int i);
+    /** @brief 向显示层增量追加 old_index→new_index 之间新增的搜索树边。 */
+    void appendSearchBranches(std::size_t old_index, std::size_t new_index);
+    /** @brief 释放显示层离屏缓冲区。 */
+    void deleteDisplayOffscreen();
 
     const GridMap& map_;                 ///< 地图引用
     const VehicleConfig& vehicle_;       ///< 车辆配置引用
@@ -103,12 +105,13 @@ private:
     int frame_ = 0;                      ///< 当前帧号
 
     // 离屏缓冲区缓存
-    Fl_Offscreen static_offscreen_ = 0;       ///< 静态层（网格+障碍物+S/G+搜索树）
-    Fl_Offscreen frame_offscreen_ = 0;         ///< 帧合成缓冲（静态+路径轨迹）
+    Fl_Offscreen static_offscreen_ = 0;       ///< 静态层（网格+障碍物+S/G）
+    Fl_Offscreen display_offscreen_ = 0;      ///< 显示层（static+树+路径，blit到屏幕）
     std::size_t cached_tree_index_ = static_cast<std::size_t>(-1);
     int cached_w_ = 0;
     int cached_h_ = 0;
-    int path_applied_to_frame_ = -1;           ///< frame_offscreen_ 已包含的路径帧号
+    bool scrub_ = false;                       ///< 当前是否是跳帧（非顺序播放）
+    int track_frame_ = -1;                     ///< display_offscreen_ 已包含到第几帧
 
     // 坐标原点偏移，支持离屏绘制 (0,0) 和屏幕绘制 (x(), y())
     mutable int draw_origin_x_ = 0;

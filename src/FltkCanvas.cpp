@@ -73,18 +73,62 @@ FltkCanvas::~FltkCanvas() {
         fl_delete_offscreen(static_offscreen_);
         static_offscreen_ = 0;
     }
-    if (frame_offscreen_) {
-        fl_delete_offscreen(frame_offscreen_);
-        frame_offscreen_ = 0;
+    if (display_offscreen_) {
+        fl_delete_offscreen(display_offscreen_);
+        display_offscreen_ = 0;
     }
 }
 
 /**
- * @brief 设置当前帧号并重绘
+ * @brief 设置当前帧号。顺序播放时增量追加路径和规划树到显示层。
  * @param[in] frame 帧号
  */
 void FltkCanvas::setFrame(int frame) {
+    const int prev = frame_;
     frame_ = std::clamp(frame, 0, std::max(0, frameCount() - 1));
+    scrub_ = (frame_ != prev + 1);
+
+    // 静态层重建（仅 resize / 首次创建）
+    const bool size_changed = (w() != cached_w_ || h() != cached_h_);
+    if (!static_offscreen_ || size_changed) {
+        ensureStaticOffscreen();
+        if (static_offscreen_) {
+            renderStaticOffscreen();
+        }
+        cached_w_ = w();
+        cached_h_ = h();
+        cached_tree_index_ = 0;
+        deleteDisplayOffscreen();
+        track_frame_ = -1;
+    }
+
+    // 显示层增量更新
+    if (!path_.empty()) {
+        ensureDisplayOffscreen();
+        if (display_offscreen_) {
+            const std::size_t new_tree_index = currentSolutionNodeIndex();
+
+            if (track_frame_ < 0 || frame_ < track_frame_) {
+                // 首次 / 向后跳帧 → 全量重建显示层
+                rebuildDisplay();
+                appendSearchBranches(0, new_tree_index);
+                cached_tree_index_ = new_tree_index;
+                for (int i = 1; i <= frame_; ++i) {
+                    appendPathSegment(i);
+                }
+                track_frame_ = frame_;
+            } else if (frame_ == track_frame_ + 1) {
+                // 顺序前进 → 增量追加树 + 路径
+                if (new_tree_index > cached_tree_index_) {
+                    appendSearchBranches(cached_tree_index_, new_tree_index);
+                    cached_tree_index_ = new_tree_index;
+                }
+                appendPathSegment(frame_);
+                track_frame_ = frame_;
+            }
+        }
+    }
+
     redraw();
 }
 
@@ -131,57 +175,14 @@ double FltkCanvas::worldY(double value) const {
         + (static_cast<double>(map_.height()) - value) * scale();
 }
 
-/** @brief FLTK重绘回调，利用分层离屏缓冲区实现增量路径绘制。 */
+/** @brief FLTK重绘回调，blit 显示层 + 画车辆。路径和树已在 setFrame 中更新。 */
 void FltkCanvas::draw() {
     if (w() <= 0 || h() <= 0) {
         return;
     }
 
-    const std::size_t current_idx = currentSolutionNodeIndex();
-
-    // 在以下情况重建静态离屏缓冲区：
-    //   - 尚未创建
-    //   - 窗口尺寸改变
-    //   - 搜索树的可视范围改变（解节点切换）
-    if (!static_offscreen_
-        || w() != cached_w_
-        || h() != cached_h_
-        || cached_tree_index_ != current_idx) {
-
-        ensureStaticOffscreen();
-        if (static_offscreen_) {
-            renderStaticOffscreen();
-        }
-        cached_w_ = w();
-        cached_h_ = h();
-        cached_tree_index_ = current_idx;
-
-        // 静态层变化 → 帧缓冲作废，下次强制重建
-        deleteFrameOffscreen();
-        path_applied_to_frame_ = -1;
-    }
-
-    if (static_offscreen_ && !path_.empty()) {
-        // 正常路径：blit 帧缓冲（含静态内容 + 路径轨迹）→ 屏幕
-        ensureFrameOffscreen();
-        if (frame_offscreen_) {
-            if (path_applied_to_frame_ < 0 || frame_ < path_applied_to_frame_) {
-                // 首次绘制 / 向后拖拽 → 重建帧缓冲（静态底图 + 全量路径）
-                resetFrameBuffer();
-                if (frame_ > 0) {
-                    applyPathIncremental(1, frame_);
-                }
-                path_applied_to_frame_ = frame_;
-            } else if (frame_ > path_applied_to_frame_) {
-                // 向前播放 → 仅增量绘制新增线段
-                applyPathIncremental(path_applied_to_frame_ + 1, frame_);
-                path_applied_to_frame_ = frame_;
-            }
-            fl_copy_offscreen(x(), y(), w(), h(), frame_offscreen_, 0, 0);
-        }
-    } else if (static_offscreen_) {
-        // 空路径 → 直接 blit 静态层
-        fl_copy_offscreen(x(), y(), w(), h(), static_offscreen_, 0, 0);
+    if (display_offscreen_) {
+        fl_copy_offscreen(x(), y(), w(), h(), display_offscreen_, 0, 0);
     } else {
         // 离屏缓冲区创建失败时的 fallback 路径
         draw_origin_x_ = x();
@@ -198,7 +199,7 @@ void FltkCanvas::draw() {
         drawPath();
     }
 
-    // 动态元素：车辆（直接画屏，每帧位置不同）
+    // 动态元素：车辆直接画屏
     draw_origin_x_ = x();
     draw_origin_y_ = y();
     if (!path_.empty()) {
@@ -325,8 +326,7 @@ std::size_t FltkCanvas::currentSolutionNodeIndex() const {
 }
 
 void FltkCanvas::drawCurrentSearchBranches() const {
-    if (search_tree_.empty() || solution_open_orders_.empty()
-        || solution_pop_orders_.empty()) {
+    if (search_tree_.empty() || solution_open_orders_.empty()) {
         return;
     }
 
@@ -334,23 +334,14 @@ void FltkCanvas::drawCurrentSearchBranches() const {
     fl_line_style(FL_SOLID, 1);
 
     const std::size_t solution_index = currentSolutionNodeIndex();
-    // 打开窗口：累积画到下一个解节点进入 open 之前
     const int open_end = solution_index + 1 < solution_open_orders_.size()
         ? solution_open_orders_[solution_index + 1]
-        : std::numeric_limits<int>::max();
-    // 剪枝窗口：剪除已弹出但未进入 closed 的边
-    const int prune_end = solution_index < solution_pop_orders_.size()
-        ? solution_pop_orders_[solution_index]
         : std::numeric_limits<int>::max();
 
     for (const SearchTreeEdge& edge : search_tree_) {
         if (!edge.accepted || edge.in_solution
             || edge.open_order <= 0
             || edge.open_order >= open_end) {
-            continue;
-        }
-        if (edge.close_order < 0 && edge.pop_order > 0
-            && edge.pop_order <= prune_end) {
             continue;
         }
         if (edge.segment.empty()) {
@@ -455,57 +446,106 @@ void FltkCanvas::renderStaticOffscreen() {
     drawObstacles();
     drawPoseMarker(map_.start(), 0x16a34a, "S");
     drawPoseMarker(map_.goal(), 0xdc2626, "G");
-    drawCurrentSearchBranches();
 
     fl_end_offscreen();
 }
 
-void FltkCanvas::ensureFrameOffscreen() {
-    if (frame_offscreen_) {
+void FltkCanvas::ensureDisplayOffscreen() {
+    if (display_offscreen_) {
         return;
     }
     if (w() > 0 && h() > 0) {
-        frame_offscreen_ = fl_create_offscreen(w(), h());
+        display_offscreen_ = fl_create_offscreen(w(), h());
     }
 }
 
-void FltkCanvas::resetFrameBuffer() {
-    fl_begin_offscreen(frame_offscreen_);
+void FltkCanvas::rebuildDisplay() {
+    fl_begin_offscreen(display_offscreen_);
     draw_origin_x_ = 0;
     draw_origin_y_ = 0;
     fl_copy_offscreen(0, 0, w(), h(), static_offscreen_, 0, 0);
     fl_end_offscreen();
 }
 
-void FltkCanvas::applyPathIncremental(int from_frame, int to_frame) {
-    fl_begin_offscreen(frame_offscreen_);
+void FltkCanvas::appendPathSegment(int i) {
+    fl_begin_offscreen(display_offscreen_);
     draw_origin_x_ = 0;
     draw_origin_y_ = 0;
 
     fl_color(rgb(0x2563eb));
     fl_line_style(FL_SOLID, 3);
 
-    const int frame_count = frameCount();
-    const int from = std::max(1, from_frame);
-    const int to = std::clamp(to_frame, from, frame_count - 1);
+    const CarPose& a = path_[static_cast<std::size_t>(i - 1)];
+    const CarPose& b = path_[static_cast<std::size_t>(i)];
+    fl_line(
+        static_cast<int>(std::round(worldX(a.x))),
+        static_cast<int>(std::round(worldY(a.y))),
+        static_cast<int>(std::round(worldX(b.x))),
+        static_cast<int>(std::round(worldY(b.y))));
 
-    for (int i = from; i <= to; ++i) {
-        const CarPose& a = path_[static_cast<std::size_t>(i - 1)];
-        const CarPose& b = path_[static_cast<std::size_t>(i)];
-        fl_line(
-            static_cast<int>(std::round(worldX(a.x))),
-            static_cast<int>(std::round(worldY(a.y))),
-            static_cast<int>(std::round(worldX(b.x))),
-            static_cast<int>(std::round(worldY(b.y))));
+    fl_line_style(0);
+    fl_end_offscreen();
+}
+
+void FltkCanvas::appendSearchBranches(
+    std::size_t old_index, std::size_t new_index) {
+    if (search_tree_.empty() || solution_open_orders_.empty()) {
+        return;
+    }
+
+    fl_begin_offscreen(display_offscreen_);
+    draw_origin_x_ = 0;
+    draw_origin_y_ = 0;
+
+    fl_color(rgb(0xdc2626));
+    fl_line_style(FL_SOLID, 1);
+
+    const int open_begin =
+        old_index + 1 < solution_open_orders_.size()
+            ? solution_open_orders_[old_index + 1]
+            : 0;
+
+    const int open_end =
+        new_index + 1 < solution_open_orders_.size()
+            ? solution_open_orders_[new_index + 1]
+            : std::numeric_limits<int>::max();
+
+    for (const SearchTreeEdge& edge : search_tree_) {
+        if (!edge.accepted || edge.in_solution) {
+            continue;
+        }
+        if (edge.open_order <= 0) {
+            continue;
+        }
+        if (edge.open_order < open_begin || edge.open_order >= open_end) {
+            continue;
+        }
+        if (edge.segment.empty()) {
+            fl_line(
+                static_cast<int>(std::round(worldX(edge.from.x))),
+                static_cast<int>(std::round(worldY(edge.from.y))),
+                static_cast<int>(std::round(worldX(edge.to.x))),
+                static_cast<int>(std::round(worldY(edge.to.y))));
+        } else {
+            CarPose previous = edge.from;
+            for (const CarPose& pose : edge.segment) {
+                fl_line(
+                    static_cast<int>(std::round(worldX(previous.x))),
+                    static_cast<int>(std::round(worldY(previous.y))),
+                    static_cast<int>(std::round(worldX(pose.x))),
+                    static_cast<int>(std::round(worldY(pose.y))));
+                previous = pose;
+            }
+        }
     }
 
     fl_line_style(0);
     fl_end_offscreen();
 }
 
-void FltkCanvas::deleteFrameOffscreen() {
-    if (frame_offscreen_) {
-        fl_delete_offscreen(frame_offscreen_);
-        frame_offscreen_ = 0;
+void FltkCanvas::deleteDisplayOffscreen() {
+    if (display_offscreen_) {
+        fl_delete_offscreen(display_offscreen_);
+        display_offscreen_ = 0;
     }
 }
